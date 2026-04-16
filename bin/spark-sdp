@@ -1,0 +1,223 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPARK_SDP_HOME="$(cd "${SCRIPT_DIR}/.." && pwd)"
+MAIN_CLASS="com.bocom.rdss.spark.sdp3x.sql.SqlPipelineCliMain"
+PROJECT_ARCHIVE_ALIAS="spark-sdp-project"
+
+resolve_jar() {
+  if [[ -n "${SPARK_SDP_JAR:-}" ]]; then
+    if [[ ! -f "${SPARK_SDP_JAR}" ]]; then
+      echo "Configured SPARK_SDP_JAR does not exist: ${SPARK_SDP_JAR}" >&2
+      exit 1
+    fi
+    printf '%s\n' "${SPARK_SDP_JAR}"
+    return
+  fi
+
+  local jar="${SCRIPT_DIR}/spark-sdp-1.0.jar"
+  if [[ ! -f "${jar}" ]]; then
+    cat >&2 <<EOF
+Could not find ${jar}.
+
+Build and place it next to this script:
+  cd ${SPARK_SDP_HOME}
+  ./mvnw package
+  cp target/spark-sdp-1.0.jar ${SCRIPT_DIR}/
+EOF
+    exit 1
+  fi
+
+  printf '%s\n' "${jar}"
+}
+
+require_spark_home() {
+  if [[ -z "${SPARK_HOME:-}" ]]; then
+    echo "SPARK_HOME is not set. Please point it to your local Spark installation." >&2
+    exit 1
+  fi
+  if [[ ! -x "${SPARK_HOME}/bin/spark-submit" ]]; then
+    echo "Could not find executable spark-submit under ${SPARK_HOME}/bin/spark-submit" >&2
+    exit 1
+  fi
+}
+
+split_args() {
+  SPARK_SUBMIT_ARGS=()
+  PIPELINE_ARGS=()
+
+  local found_command="false"
+  for arg in "$@"; do
+    if [[ "${found_command}" == "false" && ( "${arg}" == "run" || "${arg}" == "dry-run" || "${arg}" == "help" ) ]]; then
+      found_command="true"
+      PIPELINE_ARGS+=("${arg}")
+    elif [[ "${found_command}" == "true" ]]; then
+      PIPELINE_ARGS+=("${arg}")
+    else
+      SPARK_SUBMIT_ARGS+=("${arg}")
+    fi
+  done
+}
+
+find_pipeline_spec() {
+  local current_dir="$1"
+
+  while true; do
+    local found=()
+    if [[ -f "${current_dir}/spark-pipeline.yml" ]]; then
+      found+=("${current_dir}/spark-pipeline.yml")
+    fi
+    if [[ -f "${current_dir}/spark-pipeline.yaml" ]]; then
+      found+=("${current_dir}/spark-pipeline.yaml")
+    fi
+
+    if [[ ${#found[@]} -eq 1 ]]; then
+      printf '%s\n' "${found[0]}"
+      return
+    fi
+    if [[ ${#found[@]} -gt 1 ]]; then
+      echo "Multiple pipeline spec files found under ${current_dir}" >&2
+      exit 1
+    fi
+
+    if [[ "${current_dir}" == "/" ]]; then
+      echo "Could not find spark-pipeline.yml or spark-pipeline.yaml from current directory upwards." >&2
+      exit 1
+    fi
+    current_dir="$(cd "${current_dir}/.." && pwd)"
+  done
+}
+
+resolve_pipeline_spec() {
+  local command="$1"
+  shift
+  local args=("$@")
+  local i=1
+  local positional=""
+
+  while [[ ${i} -lt ${#args[@]} ]]; do
+    local arg="${args[${i}]}"
+    if [[ "${arg}" == "--spec" ]]; then
+      local spec_path="${args[$((i + 1))]:-}"
+      if [[ -z "${spec_path}" ]]; then
+        echo "Missing value for --spec." >&2
+        exit 1
+      fi
+      if [[ "${spec_path}" != /* ]]; then
+        spec_path="$(cd "${PWD}" && printf '%s/%s\n' "${PWD}" "${spec_path}")"
+      fi
+      printf '%s\n' "${spec_path}"
+      return
+    elif [[ "${arg}" == "--master" ]]; then
+      i=$((i + 2))
+      continue
+    elif [[ "${arg}" == "--submitted" || "${arg}" == "--dry-run" ]]; then
+      i=$((i + 1))
+      continue
+    fi
+    if [[ "${arg}" != --* && -z "${positional}" ]]; then
+      positional="${arg}"
+    fi
+    i=$((i + 1))
+  done
+
+  if [[ -n "${positional}" ]]; then
+    if [[ "${positional}" != /* ]]; then
+      positional="$(cd "${PWD}" && printf '%s/%s\n' "${PWD}" "${positional}")"
+    fi
+    if [[ -f "${positional}" ]]; then
+      printf '%s\n' "${positional}"
+      return
+    fi
+    if [[ -d "${positional}" ]]; then
+      find_pipeline_spec "${positional}"
+      return
+    fi
+    echo "Pipeline path does not exist: ${positional}" >&2
+    exit 1
+  fi
+
+  find_pipeline_spec "${PWD}"
+}
+
+is_cluster_deploy_mode() {
+  local i=0
+  while [[ ${i} -lt ${#SPARK_SUBMIT_ARGS[@]} ]]; do
+    if [[ "${SPARK_SUBMIT_ARGS[${i}]}" == "--deploy-mode" && $((i + 1)) -lt ${#SPARK_SUBMIT_ARGS[@]} ]]; then
+      if [[ "${SPARK_SUBMIT_ARGS[$((i + 1))]}" == "cluster" ]]; then
+        return 0
+      fi
+    fi
+    i=$((i + 1))
+  done
+  return 1
+}
+
+create_project_archive() {
+  local project_root="$1"
+  local archive_dir
+  archive_dir="$(mktemp -d "${TMPDIR:-/tmp}/spark-sdp-project.XXXXXX")"
+  local archive_path="${archive_dir}/project.zip"
+
+  if command -v zip >/dev/null 2>&1; then
+    (
+      cd "${project_root}"
+      zip -qr "${archive_path}" .
+    )
+  else
+    (
+      cd "${project_root}"
+      jar cfM "${archive_path}" .
+    )
+  fi
+
+  printf '%s\n' "${archive_path}"
+}
+
+MAIN_JAR="$(resolve_jar)"
+split_args "$@"
+
+if [[ ${#PIPELINE_ARGS[@]} -eq 0 ]]; then
+  exec java ${SPARK_SDP_JAVA_OPTS:-} -jar "${MAIN_JAR}" "$@"
+fi
+
+COMMAND="${PIPELINE_ARGS[0]}"
+if [[ "${COMMAND}" == "run" ]]; then
+  require_spark_home
+  if is_cluster_deploy_mode; then
+    SPEC_PATH="$(resolve_pipeline_spec "${COMMAND}" "${PIPELINE_ARGS[@]}")"
+    PROJECT_ROOT="$(cd "$(dirname "${SPEC_PATH}")" && pwd)"
+    SPEC_BASENAME="$(basename "${SPEC_PATH}")"
+    PROJECT_ARCHIVE="$(create_project_archive "${PROJECT_ROOT}")"
+
+    exec "${SPARK_HOME}/bin/spark-submit" \
+      "${SPARK_SUBMIT_ARGS[@]}" \
+      --archives "${PROJECT_ARCHIVE}#${PROJECT_ARCHIVE_ALIAS}" \
+      --class "${MAIN_CLASS}" \
+      --jars /Users/ywzhang/hadoopapp/spark-3.3.1/jars/spark-hive_2.12-3.3.1.jar \
+      --conf spark.driver.extraClassPath=./spark-hive_2.12-3.3.1.jar \
+      "${MAIN_JAR}" \
+      --submitted \
+      run \
+      --spec "${PROJECT_ARCHIVE_ALIAS}/${SPEC_BASENAME}"
+  fi
+  exec "${SPARK_HOME}/bin/spark-submit" \
+    "${SPARK_SUBMIT_ARGS[@]}" \
+    --class "${MAIN_CLASS}" \
+    "${MAIN_JAR}" \
+    --submitted \
+    "${PIPELINE_ARGS[@]}"
+fi
+
+if [[ "${COMMAND}" == "dry-run" ]]; then
+  require_spark_home
+  exec "${SPARK_HOME}/bin/spark-submit" \
+    "${SPARK_SUBMIT_ARGS[@]}" \
+    --class "${MAIN_CLASS}" \
+    "${MAIN_JAR}" \
+    "${PIPELINE_ARGS[@]}"
+fi
+
+exec java ${SPARK_SDP_JAVA_OPTS:-} -jar "${MAIN_JAR}" "${PIPELINE_ARGS[@]}"
