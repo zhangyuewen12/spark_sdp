@@ -86,10 +86,14 @@ public final class SqlPipelineParser {
   }
 
   private Set<String> extractInputDatasets(String querySql) {
+    // Remove string literal contents first so text like 'from fake_table' is not
+    // mistaken for a real upstream dependency.
     String masked = maskStringLiterals(querySql);
     Matcher matcher = INPUT_DATASET_PATTERN.matcher(masked);
     LinkedHashSet<String> inputDatasets = new LinkedHashSet<>();
     while (matcher.find()) {
+      // LinkedHashSet keeps the first-seen order while also deduplicating repeated
+      // references to the same dataset.
       inputDatasets.add(normalizeIdentifier(matcher.group(1)));
     }
     return inputDatasets;
@@ -107,6 +111,8 @@ public final class SqlPipelineParser {
   private List<String> splitStatements(String sqlText) {
     List<String> statements = new ArrayList<>();
     StringBuilder current = new StringBuilder();
+    // Track whether we are inside quoted text or comments. A semicolon should only
+    // split statements when all of these states are inactive.
     boolean inSingleQuote = false;
     boolean inDoubleQuote = false;
     boolean inBacktick = false;
@@ -147,6 +153,7 @@ public final class SqlPipelineParser {
 
       if (currentChar == '\'' && !inDoubleQuote && !inBacktick) {
         if (inSingleQuote && nextChar == '\'') {
+          // SQL escapes a single quote inside a string as two consecutive quotes.
           current.append(currentChar).append(nextChar);
           index++;
           continue;
@@ -159,6 +166,8 @@ public final class SqlPipelineParser {
       }
 
       if (currentChar == ';' && !inSingleQuote && !inDoubleQuote && !inBacktick) {
+        // Only treat semicolon as a statement boundary when it is not part of a
+        // quoted literal or quoted identifier.
         if (current.length() > 0) {
           statements.add(current.toString());
           current.setLength(0);
@@ -175,6 +184,8 @@ public final class SqlPipelineParser {
   }
 
   private String maskStringLiterals(String sqlText) {
+    // Keep the original length/shape of the SQL while blanking out string content,
+    // so later regex matching still sees roughly the same positions.
     StringBuilder masked = new StringBuilder(sqlText.length());
     boolean inSingleQuote = false;
     for (int index = 0; index < sqlText.length(); index++) {
@@ -182,6 +193,7 @@ public final class SqlPipelineParser {
       char nextChar = index + 1 < sqlText.length() ? sqlText.charAt(index + 1) : '\0';
       if (currentChar == '\'') {
         if (inSingleQuote && nextChar == '\'') {
+          // Preserve length for escaped quotes inside a literal.
           masked.append(' ').append(' ');
           index++;
           continue;

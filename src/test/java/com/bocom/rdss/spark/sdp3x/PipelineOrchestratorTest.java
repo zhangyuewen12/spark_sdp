@@ -6,47 +6,41 @@ import com.bocom.rdss.spark.sdp3x.api.PipelineBuilder;
 import com.bocom.rdss.spark.sdp3x.api.PipelineDefinition;
 import com.bocom.rdss.spark.sdp3x.execution.ExecutionOptions;
 import com.bocom.rdss.spark.sdp3x.execution.ExecutionReport;
+import com.bocom.rdss.spark.sdp3x.testsupport.SparkTestSupport;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.functions;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 
-public class PipelineOrchestratorTest {
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+class PipelineOrchestratorTest {
   private SparkSession spark;
   private Path warehouseDir;
 
-  @Before
-  public void setUp() throws IOException {
+  @BeforeEach
+  void setUp() throws IOException {
     warehouseDir = Files.createTempDirectory("pipeline-orchestrator-test-warehouse");
-    spark = SparkSession.builder()
-      .appName("PipelineOrchestratorTest")
-      .master("local[1]")
-      .config("spark.ui.enabled", "false")
-      .config("spark.sql.shuffle.partitions", "1")
-      .config("spark.sql.warehouse.dir", warehouseDir.toAbsolutePath().toString())
-      .getOrCreate();
+    spark = SparkTestSupport.newLocalSparkSession("PipelineOrchestratorTest", warehouseDir);
   }
 
-  @After
-  public void tearDown() {
-    if (spark != null) {
-      spark.stop();
-      spark = null;
-    }
+  @AfterEach
+  void tearDown() {
+    SparkTestSupport.stop(spark);
+    spark = null;
   }
 
   @Test
-  public void shouldExecutePipelineEndToEnd() {
+  void shouldExecutePipelineEndToEnd() {
     String suffix = String.valueOf(System.nanoTime());
     String sourceTable = "test_orders_source_" + suffix;
     String cleanView = "test_orders_clean_" + suffix;
@@ -83,15 +77,15 @@ public class PipelineOrchestratorTest {
       spark,
       ExecutionOptions.defaults().withMaterializedViewSaveMode(SaveMode.Overwrite));
 
-    Assert.assertEquals(2, report.results().size());
+    assertEquals(2, report.results().size());
 
     Dataset<Row> dailyOrders = spark.table(dailyView);
-    Assert.assertEquals(2L, dailyOrders.count());
+    assertEquals(2L, dailyOrders.count());
 
     Row eastRow = dailyOrders.where("region = 'east'").head();
     Number orderCount = eastRow.getAs("order_count");
     Number totalAmount = eastRow.getAs("total_amount");
-    Assert.assertEquals(2L, orderCount.longValue());
-    Assert.assertEquals(200.0D, totalAmount.doubleValue(), 0.001D);
+    assertEquals(2L, orderCount.longValue());
+    assertEquals(200.0D, totalAmount.doubleValue(), 0.001D);
   }
 }

@@ -3,14 +3,14 @@ package com.bocom.rdss.spark.sdp3x.sql;
 import com.bocom.rdss.spark.sdp3x.api.PipelineDefinition;
 import com.bocom.rdss.spark.sdp3x.execution.ExecutionOptions;
 import com.bocom.rdss.spark.sdp3x.execution.ExecutionReport;
+import com.bocom.rdss.spark.sdp3x.testsupport.SparkTestSupport;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -18,73 +18,53 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-public class SqlPipelineProjectRunnerTest {
+import static org.junit.jupiter.api.Assertions.*;
+
+class SqlPipelineProjectRunnerTest {
   private SparkSession spark;
   private Path warehouseDir;
 
-  @Before
-  public void setUp() throws IOException {
+  @BeforeEach
+  void setUp() throws IOException {
     warehouseDir = Files.createTempDirectory("sql-pipeline-runner-test-warehouse");
-    String metastoreUrl = "jdbc:derby:;databaseName="
-      + warehouseDir.resolve("metastore_db").toAbsolutePath()
-      + ";create=true";
-    spark = SparkSession.builder()
-      .appName("SqlPipelineProjectRunnerTest")
-      .master("local[1]")
-      .config("spark.ui.enabled", "false")
-      .config("spark.sql.shuffle.partitions", "1")
-      .config("spark.sql.warehouse.dir", warehouseDir.toAbsolutePath().toString())
-      .config("hive.metastore.uris", "")
-      .config("spark.hadoop.hive.metastore.uris", "")
-      .config("javax.jdo.option.ConnectionURL", metastoreUrl)
-      .config("spark.hadoop.javax.jdo.option.ConnectionURL", metastoreUrl)
-      .config("javax.jdo.option.ConnectionDriverName", "org.apache.derby.jdbc.EmbeddedDriver")
-      .config("spark.hadoop.javax.jdo.option.ConnectionDriverName", "org.apache.derby.jdbc.EmbeddedDriver")
-      .config("datanucleus.schema.autoCreateAll", "true")
-      .config("spark.hadoop.datanucleus.schema.autoCreateAll", "true")
-      .config("hive.metastore.schema.verification", "false")
-      .config("spark.hadoop.hive.metastore.schema.verification", "false")
-      .enableHiveSupport()
-      .getOrCreate();
+    spark = SparkTestSupport.newHiveSparkSession("SqlPipelineProjectRunnerTest", warehouseDir);
   }
 
-  @After
-  public void tearDown() {
-    if (spark != null) {
-      spark.stop();
-      spark = null;
-    }
+  @AfterEach
+  void tearDown() {
+    SparkTestSupport.stop(spark);
+    spark = null;
   }
 
   @Test
-  public void shouldCompileAndRunSqlPipelineProject() throws URISyntaxException {
+  void shouldCompileAndRunSqlPipelineProject() throws URISyntaxException {
     Path projectRoot = Paths.get(
       SqlPipelineProjectRunnerTest.class.getResource("/sql-batch-pipeline").toURI());
 
     SqlPipelineProjectRunner runner = new SqlPipelineProjectRunner();
     PipelineDefinition pipelineDefinition = runner.compile(projectRoot);
-    Assert.assertEquals("sql_orders_pipeline", pipelineDefinition.name());
-    Assert.assertEquals(3, pipelineDefinition.datasets().size());
-    Assert.assertEquals(3, pipelineDefinition.flows().size());
+    assertEquals("sql_orders_pipeline", pipelineDefinition.name());
+    assertEquals(3, pipelineDefinition.datasets().size());
+    assertEquals(3, pipelineDefinition.flows().size());
 
     ExecutionReport report = runner.run(
       projectRoot,
       spark,
       ExecutionOptions.defaults().withMaterializedViewSaveMode(SaveMode.Overwrite));
-    Assert.assertEquals(3, report.results().size());
+    assertEquals(3, report.results().size());
 
     Dataset<Row> dailyOrders = spark.table("daily_orders");
-    Assert.assertEquals(2L, dailyOrders.count());
+    assertEquals(2L, dailyOrders.count());
 
     Row eastRow = dailyOrders.where("region = 'east'").head();
     Number orderCount = eastRow.getAs("order_count");
     Number totalAmount = eastRow.getAs("total_amount");
-    Assert.assertEquals(2L, orderCount.longValue());
-    Assert.assertEquals(200.0D, totalAmount.doubleValue(), 0.001D);
+    assertEquals(2L, orderCount.longValue());
+    assertEquals(200.0D, totalAmount.doubleValue(), 0.001D);
   }
 
   @Test
-  public void shouldReadAndWriteHiveTablesWithInsertInto() throws URISyntaxException {
+  void shouldReadAndWriteHiveTablesWithInsertInto() throws URISyntaxException {
     Path projectRoot = Paths.get(
       SqlPipelineProjectRunnerTest.class.getResource("/sql-hive-insert-pipeline").toURI());
 
@@ -104,86 +84,97 @@ public class SqlPipelineProjectRunnerTest {
 
     SqlPipelineProjectRunner runner = new SqlPipelineProjectRunner();
     PipelineDefinition pipelineDefinition = runner.compile(projectRoot);
-    Assert.assertEquals(1, pipelineDefinition.datasets().size());
-    Assert.assertEquals(1, pipelineDefinition.flows().size());
+    assertEquals(1, pipelineDefinition.datasets().size());
+    assertEquals(1, pipelineDefinition.flows().size());
 
     ExecutionReport report = runner.run(
       projectRoot,
       spark,
       ExecutionOptions.defaults().withMaterializedViewSaveMode(SaveMode.Overwrite));
-    Assert.assertEquals(1, report.results().size());
+    assertEquals(1, report.results().size());
 
     Dataset<Row> sinkTable = spark.table("sql_sdp_test_db.daily_orders_sink");
-    Assert.assertEquals(2L, sinkTable.count());
+    assertEquals(2L, sinkTable.count());
 
     Row eastRow = sinkTable.where("region = 'east'").head();
     Number orderCount = eastRow.getAs("order_count");
     Number totalAmount = eastRow.getAs("total_amount");
-    Assert.assertEquals(2L, orderCount.longValue());
-    Assert.assertEquals(200.0D, totalAmount.doubleValue(), 0.001D);
+    assertEquals(2L, orderCount.longValue());
+    assertEquals(200.0D, totalAmount.doubleValue(), 0.001D);
   }
 
   @Test
-  public void shouldParseRunCliCommand() {
+  void shouldParseRunCliCommand() {
     SqlPipelineCliOptions cliOptions = SqlPipelineCliOptions.parse(
       new String[] {"run", "examples/sql-batch-pipeline", "--master", "local[2]"});
 
-    Assert.assertEquals(SqlPipelineCliOptions.Command.RUN, cliOptions.command());
-    Assert.assertEquals(Paths.get("examples/sql-batch-pipeline"), cliOptions.projectPath());
-    Assert.assertEquals("local[2]", cliOptions.master());
+    assertEquals(SqlPipelineCliOptions.Command.RUN, cliOptions.command());
+    assertEquals(Paths.get("examples/sql-batch-pipeline"), cliOptions.projectPath());
+    assertEquals("local[2]", cliOptions.master());
   }
 
   @Test
-  public void shouldParseDryRunCliCommand() {
+  void shouldParseDryRunCliCommand() {
     SqlPipelineCliOptions cliOptions = SqlPipelineCliOptions.parse(
       new String[] {"dry-run", "examples/sql-batch-pipeline"});
 
-    Assert.assertEquals(SqlPipelineCliOptions.Command.DRY_RUN, cliOptions.command());
-    Assert.assertEquals(Paths.get("examples/sql-batch-pipeline"), cliOptions.projectPath());
-    Assert.assertEquals(null, cliOptions.master());
+    assertEquals(SqlPipelineCliOptions.Command.DRY_RUN, cliOptions.command());
+    assertEquals(Paths.get("examples/sql-batch-pipeline"), cliOptions.projectPath());
+    assertNull(cliOptions.master());
   }
 
   @Test
-  public void shouldKeepLegacyDryRunCompatibility() {
+  void shouldKeepLegacyDryRunCompatibility() {
     SqlPipelineCliOptions cliOptions = SqlPipelineCliOptions.parse(
       new String[] {"examples/sql-batch-pipeline", "--dry-run"});
 
-    Assert.assertEquals(SqlPipelineCliOptions.Command.DRY_RUN, cliOptions.command());
-    Assert.assertEquals(Paths.get("examples/sql-batch-pipeline"), cliOptions.projectPath());
+    assertEquals(SqlPipelineCliOptions.Command.DRY_RUN, cliOptions.command());
+    assertEquals(Paths.get("examples/sql-batch-pipeline"), cliOptions.projectPath());
   }
 
   @Test
-  public void shouldParseSpecPathAndSparkSubmitMarker() {
+  void shouldParseSpecPathAndSparkSubmitMarker() {
     SqlPipelineCliOptions cliOptions = SqlPipelineCliOptions.parse(
       new String[] {"run", "--spec", "examples/sql-batch-pipeline/spark-pipeline.yml", "--submitted"});
 
-    Assert.assertEquals(SqlPipelineCliOptions.Command.RUN, cliOptions.command());
-    Assert.assertEquals(
+    assertEquals(SqlPipelineCliOptions.Command.RUN, cliOptions.command());
+    assertEquals(
       Paths.get("examples/sql-batch-pipeline/spark-pipeline.yml"),
       cliOptions.projectPath());
-    Assert.assertTrue(cliOptions.submittedViaSparkSubmit());
+    assertTrue(cliOptions.submittedViaSparkSubmit());
   }
 
   @Test
-  public void shouldParseClusterSubmissionStyleArguments() {
+  void shouldParseClusterSubmissionStyleArguments() {
     SqlPipelineCliOptions cliOptions = SqlPipelineCliOptions.parse(
       new String[] {"--submitted", "run", "--spec", "spark-sdp-project/spark-pipeline.yml"});
 
-    Assert.assertEquals(SqlPipelineCliOptions.Command.RUN, cliOptions.command());
-    Assert.assertEquals(
+    assertEquals(SqlPipelineCliOptions.Command.RUN, cliOptions.command());
+    assertEquals(
       Paths.get("spark-sdp-project/spark-pipeline.yml"),
       cliOptions.projectPath());
-    Assert.assertTrue(cliOptions.submittedViaSparkSubmit());
+    assertTrue(cliOptions.submittedViaSparkSubmit());
   }
 
   @Test
-  public void shouldFindSpecFromNestedDirectory() throws URISyntaxException {
+  void shouldFailWhenSpecIsMissingInSpecifiedDirectory() throws IOException {
+    Path tempDir = Files.createTempDirectory("sql-pipeline-project-spec-loader");
+
+    SqlPipelineProjectException exception = assertThrows(
+      SqlPipelineProjectException.class,
+      () -> new SqlPipelineProjectSpecLoader().load(tempDir));
+
+    assertTrue(exception.getMessage().contains("Missing SQL pipeline spec file under"));
+  }
+
+  @Test
+  void shouldLoadSpecFromSpecifiedDirectory() throws URISyntaxException {
     Path projectRoot = Paths.get(
       SqlPipelineProjectRunnerTest.class.getResource("/sql-batch-pipeline").toURI());
 
     SqlPipelineProjectSpec spec = new SqlPipelineProjectSpecLoader()
-      .load(projectRoot.resolve("transformations"));
+      .load(projectRoot);
 
-    Assert.assertEquals(projectRoot.toAbsolutePath().normalize(), spec.rootDirectory());
+    assertEquals(projectRoot.toAbsolutePath().normalize(), spec.rootDirectory());
   }
 }

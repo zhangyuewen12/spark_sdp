@@ -291,7 +291,7 @@ cp target/spark-sdp-1.0.jar bin/
 - `spark-sdp-1.0.jar` 不包含 `spark-core` 和 `spark-sql`，提交到 Yarn 时会使用 Spark 安装自带的依赖
 - 运行时会启用 Hive support，所以只要 Spark 环境里 metastore 配置可用，SQL 就能直接读写 Hive 表
 
-如果你已经 `cd` 到 pipeline 目录下，也可以像官方 `spark-pipelines` 一样省略 `--spec`：
+如果你已经 `cd` 到 pipeline 目录下，也可以省略 `--spec`：
 
 ```bash
 cd examples/sql-batch-pipeline
@@ -302,7 +302,7 @@ cd examples/sql-batch-pipeline
   run
 ```
 
-此时脚本会从当前目录向上自动发现 `spark-pipeline.yml` / `spark-pipeline.yaml`。
+此时脚本只会在当前目录下查找 `spark-pipeline.yml` / `spark-pipeline.yaml`。
 
 ## 5.4 本地 Main 调试
 

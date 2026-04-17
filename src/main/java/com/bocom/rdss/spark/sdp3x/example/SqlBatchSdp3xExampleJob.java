@@ -22,8 +22,11 @@ import com.bocom.rdss.spark.sdp3x.sql.SqlPipelineProjectRunner;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.util.Comparator;
 
 /**
  * Demonstrates the SQL-project MVP with {@code spark-pipeline.yml} and {@code .sql} files.
@@ -61,6 +64,7 @@ public final class SqlBatchSdp3xExampleJob {
       .getOrCreate();
 
     try {
+      resetExampleTables(projectRoot, spark);
       new SqlPipelineProjectRunner().run(
         projectRoot,
         spark,
@@ -72,6 +76,36 @@ public final class SqlBatchSdp3xExampleJob {
       spark.table(DAILY_TABLE).show(false);
     } finally {
       spark.stop();
+    }
+  }
+
+  private static void resetExampleTables(Path projectRoot, SparkSession spark) {
+    deleteRecursively(projectRoot.resolve("target").resolve("sql-example-metastore"));
+    spark.sql("DROP TABLE IF EXISTS orders_source");
+    spark.sql("DROP TABLE IF EXISTS orders_clean");
+    spark.sql("DROP TABLE IF EXISTS daily_orders");
+    Path warehouse = Paths.get("target", "sql-example-warehouse").toAbsolutePath().normalize();
+    deleteRecursively(warehouse.resolve("orders_source"));
+    deleteRecursively(warehouse.resolve("orders_clean"));
+    deleteRecursively(warehouse.resolve("daily_orders"));
+  }
+
+  private static void deleteRecursively(Path path) {
+    if (!Files.exists(path)) {
+      return;
+    }
+    try {
+      Files.walk(path)
+        .sorted(Comparator.reverseOrder())
+        .forEach(current -> {
+          try {
+            Files.deleteIfExists(current);
+          } catch (IOException e) {
+            throw new IllegalStateException("Failed to clean SQL example path: " + current, e);
+          }
+        });
+    } catch (IOException e) {
+      throw new IllegalStateException("Failed to traverse SQL example path: " + path, e);
     }
   }
 }

@@ -54,6 +54,9 @@ final class SqlPipelineCliOptions {
     }
 
     Command command = Command.RUN;
+    // Some invocation paths prepend transport flags before the logical command
+    // (for example "--submitted run --spec ..."). Once we have recognized run or
+    // dry-run, do not reinterpret later tokens with the same text as another command.
     boolean commandExplicitlySet = false;
     int index = 0;
     if ("run".equals(firstArg)) {

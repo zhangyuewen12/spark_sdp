@@ -51,35 +51,31 @@ public final class SqlPipelineProjectSpecLoader {
       throw new SqlPipelineProjectException("SQL pipeline path does not exist: " + normalizedPath);
     }
 
-    return findSpecInAncestors(normalizedPath);
+    // Only inspect the directory explicitly provided by the caller. We intentionally
+    // do not walk up parent directories.
+    return findSpecInDirectory(normalizedPath);
   }
 
-  private Path findSpecInAncestors(Path currentDirectory) {
-    Path directory = currentDirectory;
-    while (directory != null) {
-      List<Path> foundFiles = new ArrayList<>();
-      for (String specFile : SPEC_FILES) {
-        Path candidate = directory.resolve(specFile);
-        if (Files.isRegularFile(candidate)) {
-          foundFiles.add(candidate);
-        }
+  private Path findSpecInDirectory(Path directory) {
+    List<Path> foundFiles = new ArrayList<>();
+    for (String specFile : SPEC_FILES) {
+      Path candidate = directory.resolve(specFile);
+      if (Files.isRegularFile(candidate)) {
+        foundFiles.add(candidate);
       }
-
-      if (foundFiles.size() == 1) {
-        return foundFiles.get(0);
-      }
-      if (foundFiles.size() > 1) {
-        throw new SqlPipelineProjectException(
-          "Multiple SQL pipeline spec files found under: " + directory
-            + ". Expected only one of " + String.join(", ", SPEC_FILES));
-      }
-
-      directory = directory.getParent();
     }
 
+    if (foundFiles.size() == 1) {
+      return foundFiles.get(0);
+    }
+    if (foundFiles.size() > 1) {
+      throw new SqlPipelineProjectException(
+        "Multiple SQL pipeline spec files found under: " + directory
+          + ". Expected only one of " + String.join(", ", SPEC_FILES));
+    }
     throw new SqlPipelineProjectException(
-      "Missing SQL pipeline spec file under: " + currentDirectory
-        + " or its ancestors. Expected one of " + String.join(", ", SPEC_FILES));
+      "Missing SQL pipeline spec file under: " + directory
+        + ". Expected one of " + String.join(", ", SPEC_FILES));
   }
 
   private Map<String, Object> readYaml(Path specPath) {

@@ -25,7 +25,12 @@ import com.bocom.rdss.spark.sdp3x.api.PipelineBuilder;
 import com.bocom.rdss.spark.sdp3x.api.PipelineDefinition;
 import com.bocom.rdss.spark.sdp3x.execution.ExecutionOptions;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Collections;
 
 /**
@@ -53,6 +58,7 @@ public final class BatchSdp3xExampleJob {
       .getOrCreate();
 
     try {
+      resetExampleTables(spark);
       prepareSourceData(spark);
       PipelineDefinition pipeline = buildPipeline();
       ExecutionOptions options = ExecutionOptions.defaults()
@@ -66,6 +72,16 @@ public final class BatchSdp3xExampleJob {
     } finally {
       spark.stop();
     }
+  }
+
+  private static void resetExampleTables(SparkSession spark) {
+    spark.sql("DROP TABLE IF EXISTS " + SOURCE_TABLE);
+    spark.sql("DROP TABLE IF EXISTS " + CLEAN_TABLE);
+    spark.sql("DROP TABLE IF EXISTS " + DAILY_TABLE);
+    Path warehouse = Paths.get("target", "sdp3x-warehouse").toAbsolutePath().normalize();
+    deleteRecursively(warehouse.resolve(SOURCE_TABLE));
+    deleteRecursively(warehouse.resolve(CLEAN_TABLE));
+    deleteRecursively(warehouse.resolve(DAILY_TABLE));
   }
 
   /**
@@ -167,6 +183,25 @@ public final class BatchSdp3xExampleJob {
     /** Sets the order amount. */
     public void setAmount(double amount) {
       this.amount = amount;
+    }
+  }
+
+  private static void deleteRecursively(Path path) {
+    if (!Files.exists(path)) {
+      return;
+    }
+    try {
+      Files.walk(path)
+        .sorted(Comparator.reverseOrder())
+        .forEach(current -> {
+          try {
+            Files.deleteIfExists(current);
+          } catch (IOException e) {
+            throw new IllegalStateException("Failed to clean example warehouse path: " + current, e);
+          }
+        });
+    } catch (IOException e) {
+      throw new IllegalStateException("Failed to traverse example warehouse path: " + path, e);
     }
   }
 }

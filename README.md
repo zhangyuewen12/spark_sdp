@@ -140,7 +140,7 @@ bin/spark-sdp \
   --spec examples/sql-hive-insert-pipeline/spark-pipeline.yml
 ```
 
-也可以像官方 `spark-pipelines` 一样，先进入项目目录，再让脚本自动发现 `spark-pipeline.yml`：
+也可以先进入项目目录，再让脚本从当前目录读取 `spark-pipeline.yml`：
 
 ```bash
 cd examples/sql-batch-pipeline
