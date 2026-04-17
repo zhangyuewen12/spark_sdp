@@ -7,8 +7,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -26,6 +28,8 @@ public final class SqlPipelineParser {
     "(?is)^INSERT\\s+INTO\\s+(?:TABLE\\s+)?"
       + "((?:`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)(?:\\s*\\.\\s*(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*))*)"
       + "\\s+(SELECT\\b.*)$");
+  private static final Pattern SET_PATTERN = Pattern.compile(
+    "(?is)^SET\\s+([A-Za-z0-9._-]+)\\s*=\\s*(.*?)\\s*$");
   private static final Pattern INPUT_DATASET_PATTERN = Pattern.compile(
     "(?is)\\b(?:FROM|JOIN)\\s+"
       + "((?:`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)(?:\\s*\\.\\s*(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*))*)");
@@ -33,13 +37,22 @@ public final class SqlPipelineParser {
   public List<SqlPipelineDefinition> parse(Path sqlFile, int firstStatementIndex) {
     List<String> statements = splitStatements(readSql(sqlFile));
     List<SqlPipelineDefinition> definitions = new ArrayList<>();
+    LinkedHashMap<String, String> pendingSparkConf = new LinkedHashMap<>();
     int statementIndex = firstStatementIndex;
     for (String statement : statements) {
       String trimmed = statement.trim();
       if (trimmed.isEmpty()) {
         continue;
       }
-      definitions.add(parseStatement(trimmed, sqlFile, statementIndex++));
+      if (parseSetStatement(trimmed, pendingSparkConf)) {
+        continue;
+      }
+      definitions.add(parseStatement(trimmed, sqlFile, statementIndex++, pendingSparkConf));
+      pendingSparkConf.clear();
+    }
+    if (!pendingSparkConf.isEmpty()) {
+      throw new SqlPipelineProjectException(
+        "SET statements in " + sqlFile + " must be followed by a supported SQL flow statement");
     }
     return definitions;
   }
@@ -47,7 +60,8 @@ public final class SqlPipelineParser {
   private SqlPipelineDefinition parseStatement(
       String statement,
       Path sqlFile,
-      int statementIndex) {
+      int statementIndex,
+      Map<String, String> sparkConf) {
     Matcher matcher = CREATE_VIEW_PATTERN.matcher(statement);
     if (matcher.matches()) {
       String viewType = matcher.group(1).trim().toUpperCase();
@@ -64,7 +78,8 @@ public final class SqlPipelineParser {
         extractInputDatasets(querySql),
         sqlFile,
         statementIndex,
-        SqlPipelineDefinition.WriteMode.SAVE_AS_TABLE);
+        SqlPipelineDefinition.WriteMode.SAVE_AS_TABLE,
+        sparkConf);
     }
 
     matcher = INSERT_INTO_PATTERN.matcher(statement);
@@ -78,11 +93,21 @@ public final class SqlPipelineParser {
         extractInputDatasets(querySql),
         sqlFile,
         statementIndex,
-        SqlPipelineDefinition.WriteMode.INSERT_INTO);
+        SqlPipelineDefinition.WriteMode.INSERT_INTO,
+        sparkConf);
     }
 
     throw new SqlPipelineProjectException(
       "Unsupported SQL statement in " + sqlFile + ": " + statement);
+  }
+
+  private boolean parseSetStatement(String statement, Map<String, String> pendingSparkConf) {
+    Matcher matcher = SET_PATTERN.matcher(statement);
+    if (!matcher.matches()) {
+      return false;
+    }
+    pendingSparkConf.put(matcher.group(1).trim(), stripOptionalQuotes(matcher.group(2).trim()));
+    return true;
   }
 
   private Set<String> extractInputDatasets(String querySql) {
@@ -221,5 +246,15 @@ public final class SqlPipelineParser {
       normalizedParts.add(normalized);
     }
     return String.join(".", normalizedParts);
+  }
+
+  private String stripOptionalQuotes(String value) {
+    if (value.length() >= 2) {
+      if ((value.startsWith("\"") && value.endsWith("\""))
+          || (value.startsWith("'") && value.endsWith("'"))) {
+        return value.substring(1, value.length() - 1);
+      }
+    }
+    return value;
   }
 }

@@ -4,7 +4,9 @@ import com.bocom.rdss.spark.sdp3x.api.DatasetKind;
 
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -23,6 +25,7 @@ public final class SqlPipelineDefinition {
   private final Path sourceFile;
   private final int statementIndex;
   private final WriteMode writeMode;
+  private final Map<String, String> sparkConf;
 
   public SqlPipelineDefinition(
       String datasetName,
@@ -31,7 +34,8 @@ public final class SqlPipelineDefinition {
       Set<String> inputDatasets,
       Path sourceFile,
       int statementIndex,
-      WriteMode writeMode) {
+      WriteMode writeMode,
+      Map<String, String> sparkConf) {
     this.datasetName = datasetName;
     this.datasetKind = datasetKind;
     this.querySql = querySql;
@@ -39,6 +43,7 @@ public final class SqlPipelineDefinition {
     this.sourceFile = sourceFile;
     this.statementIndex = statementIndex;
     this.writeMode = writeMode;
+    this.sparkConf = Collections.unmodifiableMap(new LinkedHashMap<>(sparkConf));
   }
 
   public String datasetName() {
@@ -67,5 +72,9 @@ public final class SqlPipelineDefinition {
 
   public WriteMode writeMode() {
     return writeMode;
+  }
+
+  public Map<String, String> sparkConf() {
+    return sparkConf;
   }
 }

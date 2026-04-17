@@ -9,6 +9,7 @@
 - `CREATE MATERIALIZED VIEW ... AS SELECT ...`
 - `CREATE TEMPORARY VIEW ... AS SELECT ...`
 - `INSERT INTO [TABLE] target SELECT ...`
+- `SET key=value;` 为下一条 SQL flow 设置局部 Spark 参数
 - `run` / `dry-run` 命令
 - 本地 Spark 批处理运行
 - 基于 `SPARK_HOME` 的 `spark-submit` 提交入口
@@ -174,6 +175,28 @@ GROUP BY region, TO_DATE(orderDate);
 - 当前实现会走 Spark 的 `insertInto(...)` 语义
 - 这种写法适合写入 Hive 中已经建好的明细表、汇总表或分区表
 - 上游依赖仍然会从 `FROM` / `JOIN` 中自动提取
+
+### 3.5 为单个 flow 设置 Spark 参数
+
+如果你只想让某一条 SQL flow 使用特殊的 Spark 参数，可以在它前面写一个或多个
+`SET key=value;`：
+
+```sql
+SET spark.sql.shuffle.partitions=8;
+SET spark.sql.autoBroadcastJoinThreshold=-1;
+CREATE MATERIALIZED VIEW orders_clean AS
+SELECT *
+FROM orders_source
+WHERE amount > 0;
+```
+
+规则说明：
+
+- `spark-pipeline.yml` 里的 `configuration` 仍然是整条 pipeline 的默认配置
+- `SET key=value;` 只作用于它后面的那一条 `CREATE ... AS SELECT ...` 或 `INSERT INTO ... SELECT ...`
+- 多个连续的 `SET` 会叠加到同一个 flow
+- 该 flow 执行完成后，这些局部配置会自动恢复，不会污染后续 flow
+- 单独写 `SET` 而后面没有实际 SQL flow 会报错
 
 ## 4. 开发步骤
 

@@ -63,11 +63,17 @@ public final class SqlPipelineProjectCompiler {
         if (declaredDatasets.add(definition.datasetName())) {
           pipelineBuilder.addDataset(createDatasetDefinition(spec, definition));
         }
-        pipelineBuilder.addFlow(ImmutableFlowDefinition.batchFlow(
+        ImmutableFlowDefinition flowDefinition = ImmutableFlowDefinition.batchFlow(
           flowName(definition),
           definition.datasetName(),
           definition.inputDatasets(),
-          runtime -> runtime.spark().sql(definition.querySql())));
+          runtime -> runtime.spark().sql(definition.querySql()));
+        for (java.util.Map.Entry<String, String> sparkConfEntry : definition.sparkConf().entrySet()) {
+          flowDefinition = flowDefinition.withSparkConf(
+            sparkConfEntry.getKey(),
+            sparkConfEntry.getValue());
+        }
+        pipelineBuilder.addFlow(flowDefinition);
       }
     }
     return pipelineBuilder.build();
