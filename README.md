@@ -1,15 +1,20 @@
-# Spark 3.x SQL SDP MVP
+# spark_platform
 
-这个仓库现在是一个 Spark 3.3.x 上的 SQL-first SDP MVP，目标是让开发人员基于：
+这个仓库现在是一个 Spark 3.3.x 上的 SQL-first 作业开发平台，包含两个 Maven module：
 
-- `spark-pipeline.yml`
+- `spark-core`：Spark 作业定义、SQL pipeline 编译、依赖分析、执行规划和任务执行逻辑
+- `spark-example`：基于 `spark-core` 的 Spark 作业样例
+
+目标是让开发人员基于：
+
+- `spark-pipeline.properties`
 - `transformations/*.sql`
 
 来开发批处理 Spark 作业，而不是直接编写 Java `main()`。
 
 ## 当前能力
 
-- 支持从 `spark-pipeline.yml` 加载项目配置
+- 支持从 `spark-pipeline.properties` 加载项目配置
 - 支持扫描一个或多个 SQL 目录
 - 支持批处理 SQL 声明：
   - `CREATE MATERIALIZED VIEW ... AS SELECT ...`
@@ -26,21 +31,26 @@
 
 ```text
 my-pipeline/
-  spark-pipeline.yml
+  spark-pipeline.properties
   transformations/
     000_seed_orders.sql
     010_clean_orders.sql
     020_daily_orders.sql
 ```
 
-示例 `spark-pipeline.yml`：
+示例 `spark-pipeline.properties`：
 
-```yaml
-name: sql_orders_pipeline
-configuration:
-  spark.sql.shuffle.partitions: "1"
-libraries:
-  - transformations
+```properties
+name=sql_orders_pipeline
+libraries=transformations
+configuration.spark.sql.shuffle.partitions=1
+
+master=yarn
+deploy-mode=cluster
+queue=default
+executor.num=1
+executor.memory=1g
+executor.cores=1
 ```
 
 示例 SQL：
@@ -99,19 +109,19 @@ GROUP BY region, TO_DATE(orderDate);
 查看可用命令：
 
 ```bash
-bin/spark-sdp help
+bin/spark-sdp.sh help
 ```
 
 对 SQL 项目做 dry-run：
 
 ```bash
-bin/spark-sdp dry-run examples/sql-batch-pipeline
+bin/spark-sdp.sh dry-run examples/sql-batch-pipeline
 ```
 
 本地 dry-run：
 
 ```bash
-bin/spark-sdp dry-run --spec examples/sql-batch-pipeline/spark-pipeline.yml
+bin/spark-sdp.sh dry-run --spec examples/sql-batch-pipeline/spark-pipeline.properties
 ```
 
 提交到 Yarn 运行：
@@ -119,11 +129,11 @@ bin/spark-sdp dry-run --spec examples/sql-batch-pipeline/spark-pipeline.yml
 ```bash
 export SPARK_HOME=/path/to/your/spark
 
-bin/spark-sdp \
+bin/spark-sdp.sh \
   --master yarn \
   --deploy-mode cluster \
   run \
-  --spec examples/sql-batch-pipeline/spark-pipeline.yml
+  --spec examples/sql-batch-pipeline/spark-pipeline.properties
 ```
 
 提交到 Yarn `cluster` 模式并通过 Hive metastore 读写 Hive 表时，建议把 `hive-site.xml`
@@ -132,7 +142,7 @@ bin/spark-sdp \
 ```bash
 export SPARK_HOME=/path/to/your/spark
 
-bin/spark-sdp \
+bin/spark-sdp.sh \
   --master yarn \
   --deploy-mode cluster \
   --files /path/to/hive-site.xml \
@@ -145,7 +155,7 @@ bin/spark-sdp \
 ```bash
 cd examples/sql-batch-pipeline
 
-../../bin/spark-sdp \
+../../bin/spark-sdp.sh \
   --master yarn \
   --deploy-mode cluster \
   run
@@ -155,10 +165,10 @@ cd examples/sql-batch-pipeline
 
 ```bash
 ./mvnw package
-cp target/spark-sdp-1.0.jar bin/
+cp target/spark-sdp.sh-1.0.jar bin/
 ```
 
-`bin/spark-sdp` 只会读取同目录下的 `spark-sdp-1.0.jar`。`run` 和 `dry-run` 都会通过 `${SPARK_HOME}/bin/spark-submit` 启动，`help` 直接走本地 jar；当使用 `--deploy-mode cluster` 时，脚本会自动把 `spark-pipeline.yml` 和 SQL 目录打包成 archive，随作业一起分发。打包产物里不会包含 `spark-core` 和 `spark-sql`，提交到 Yarn 时会使用 Spark 安装自带的依赖。
+`bin/spark-sdp` 只会读取同目录下的 `spark-sdp-1.0.jar`。`run` 和 `dry-run` 都会通过 `${SPARK_HOME}/bin/spark-submit` 启动，`help` 直接走本地 jar；当使用 `--deploy-mode cluster` 时，脚本会自动把 `spark-pipeline.properties` 和 SQL 目录打包成 archive，随作业一起分发。打包产物里不会包含 `spark-core` 和 `spark-sql`，提交到 Yarn 时会使用 Spark 安装自带的依赖。
 
 `database` 配置表示这条 pipeline 的默认数据库，效果等同于在执行所有 SQL 之前先做一次
 `USE <database>`。如果 SQL 里已经显式写了库名，例如 `db1.orders_source` 或
@@ -168,7 +178,7 @@ cp target/spark-sdp-1.0.jar bin/
 `com.bocom.rdss.spark.sdp3x.example.SqlPipelineLocalDebugMain`：
 
 ```text
-run --spec examples/sql-batch-pipeline/spark-pipeline.yml --master local[*]
+run --spec examples/sql-batch-pipeline/spark-pipeline.properties --master local[*]
 ```
 
 之所以同一个 main 同时支持本地和 `spark-sdp`，是因为 `spark-sdp` 提交时会额外传入
@@ -180,7 +190,7 @@ run --spec examples/sql-batch-pipeline/spark-pipeline.yml --master local[*]
 ${SPARK_HOME}/bin/spark-submit \
   --master local[*] \
   --class com.bocom.rdss.spark.sdp3x.example.SqlBatchSdp3xExampleJob \
-  bin/spark-sdp-1.0.jar
+  bin/spark-sdp.sh-1.0.jar
 ```
 
 开发人员中文使用样例见：

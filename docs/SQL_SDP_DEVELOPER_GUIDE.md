@@ -240,7 +240,7 @@ WHERE amount > 0;
 ```bash
 ./mvnw package
 
-bin/spark-sdp dry-run --spec examples/sql-batch-pipeline/spark-pipeline.yml
+bin/spark-sdp.sh dry-run --spec examples/sql-batch-pipeline/spark-pipeline.yml
 ```
 
 预期输出类似：
@@ -274,7 +274,7 @@ Stage 1:
 
 export SPARK_HOME=/path/to/your/spark
 
-bin/spark-sdp \
+bin/spark-sdp.sh \
   --master yarn \
   --deploy-mode client \
   run \
@@ -284,7 +284,7 @@ bin/spark-sdp \
 如果提交到 Yarn `cluster` 模式，并且你的 Hive 配置依赖 `hive-site.xml`，可以这样：
 
 ```bash
-bin/spark-sdp \
+bin/spark-sdp.sh \
   --master yarn \
   --deploy-mode cluster \
   --files /path/to/hive-site.xml \
@@ -295,14 +295,14 @@ bin/spark-sdp \
 如果你想先看帮助信息：
 
 ```bash
-bin/spark-sdp help
+bin/spark-sdp.sh help
 ```
 
 先执行打包，并把产物复制到 `bin/` 目录：
 
 ```bash
 ./mvnw package
-cp target/spark-sdp-1.0.jar bin/
+cp target/spark-sdp.sh-1.0.jar bin/
 ```
 
 `bin/spark-sdp` 只会读取同目录下的 `spark-sdp-1.0.jar`。其中：
@@ -319,7 +319,7 @@ cp target/spark-sdp-1.0.jar bin/
 ```bash
 cd examples/sql-batch-pipeline
 
-../../bin/spark-sdp \
+../../bin/spark-sdp.sh \
   --master yarn \
   --deploy-mode cluster \
   run
@@ -347,6 +347,8 @@ run --spec examples/sql-batch-pipeline/spark-pipeline.yml --master local[*]
 - 通过 `spark-sdp` 提交时，脚本会给主类追加 `--submitted`
 - Java 入口检测到这个标记后，不再强制创建本地 `local[*]` SparkSession，而是直接继承 `spark-submit` / Yarn 的 Spark 环境
 - 直接在 IDE 里运行 main 时没有 `--submitted`，代码就回退到本地模式，自动创建 `local[*]` SparkSession
+- 本地模式会优先尝试读取 classpath 下的 `dev/hive-site.xml` 来连接外部 Hive metastore；如果资源不存在、被显式关闭或连接失败，则自动回退到嵌入式 Derby metastore
+- 如果你想强制本地继续使用 Derby，可以加 JVM 参数：`-Dspark.sdp.local.dev-hive.enabled=false`
 
 ### 5.3 运行仓库内置完整 demo
 
@@ -354,7 +356,7 @@ run --spec examples/sql-batch-pipeline/spark-pipeline.yml --master local[*]
 
 - 直接执行自包含的 `examples/sql-batch-pipeline`
 - 最后打印 `orders_clean` 和 `daily_orders`
-- 本地 demo 会自动使用嵌入式 Derby metastore，避免受你机器外部 Hive 配置影响
+- 仓库里的自包含 demo `SqlBatchSdp3xExampleJob` 仍然固定使用嵌入式 Derby metastore，避免受你机器外部 Hive 配置影响
 
 执行命令：
 
@@ -364,7 +366,7 @@ run --spec examples/sql-batch-pipeline/spark-pipeline.yml --master local[*]
 ${SPARK_HOME}/bin/spark-submit \
   --master local[*] \
   --class com.bocom.rdss.spark.sdp3x.example.SqlBatchSdp3xExampleJob \
-  bin/spark-sdp-1.0.jar
+  bin/spark-sdp.sh-1.0.jar
 ```
 
 运行成功后你会看到类似输出：

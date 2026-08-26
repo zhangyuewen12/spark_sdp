@@ -1,0 +1,13 @@
+----------------------------------------------------------------
+Thu Jun 11 17:14:59 CST 2026:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.14.2.0 - (1828579): instance a816c00e-019e-b5f6-a1ad-000096693988 
+on database directory /private/var/folders/qw/vvbp2svx6vzgss7ckzkhm1th0000gn/T/junit6491340565409515058/sql-batch-pipeline/target/sql-example-metastore with class loader org.apache.spark.sql.hive.client.IsolatedClientLoader$$anon$1@207fce87 
+Loaded from file:/Users/ywzhang/.m2/repository/org/apache/derby/derby/10.14.2.0/derby-10.14.2.0.jar
+java.vendor=Oracle Corporation
+java.runtime.version=1.8.0_451-b10
+user.dir=/Users/ywzhang/github_project/spark_sdp/spark-example
+os.name=Mac OS X
+os.arch=aarch64
+os.version=14.4
+derby.system.home=null
+Database Class Loader started - derby.database.classpath=''
