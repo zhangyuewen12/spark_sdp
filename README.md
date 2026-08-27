@@ -7,14 +7,14 @@
 
 目标是让开发人员基于：
 
-- `spark-pipeline.properties`
+- `spark-pipeline.yaml`
 - `transformations/*.sql`
 
 来开发批处理 Spark 作业，而不是直接编写 Java `main()`。
 
 ## 当前能力
 
-- 支持从 `spark-pipeline.properties` 加载项目配置
+- 支持从 `spark-pipeline.yaml` 加载项目配置
 - 支持扫描一个或多个 SQL 目录
 - 支持批处理 SQL 声明：
   - `CREATE MATERIALIZED VIEW ... AS SELECT ...`
@@ -22,7 +22,7 @@
   - `INSERT INTO [TABLE] target SELECT ...`
 - 自动从 SQL 中抽取 `FROM` / `JOIN` 依赖并生成执行顺序
 - 复用现有的依赖分析、拓扑规划和本地批执行器
-- 支持 `run` / `dry-run` 命令生成或执行 pipeline
+- 支持生产提交和 IDEA 本地执行 pipeline
 - 支持通过 Hive metastore 读取和写入 Hive 表
 
 ## 项目结构
@@ -31,26 +31,28 @@
 
 ```text
 my-pipeline/
-  spark-pipeline.properties
+  spark-pipeline.yaml
   transformations/
     000_seed_orders.sql
     010_clean_orders.sql
     020_daily_orders.sql
 ```
 
-示例 `spark-pipeline.properties`：
+示例 `spark-pipeline.yaml`：
 
-```properties
-name=sql_orders_pipeline
-libraries=transformations
-configuration.spark.sql.shuffle.partitions=1
-
-master=yarn
-deploy-mode=cluster
-queue=default
-executor.num=1
-executor.memory=1g
-executor.cores=1
+```yaml
+name: sql_orders_pipeline
+libraries:
+  - transformations
+configuration:
+  spark.sql.shuffle.partitions: "1"
+spark-submit:
+  master: yarn
+  deploy-mode: cluster
+  queue: default
+  executor.num: "1"
+  executor.memory: 1g
+  executor.cores: "1"
 ```
 
 示例 SQL：
@@ -94,6 +96,27 @@ GROUP BY region, TO_DATE(orderDate);
 
 ## 运行方式
 
+生产提交入口（入口类 A）读取 Job 目录中的配置，生成 `spark-submit` 命令，并以 Yarn
+cluster 模式启动入口类 B：
+
+```bash
+export SPARK_HOME=/path/to/spark
+java -cp spark-core/target/spark-sdp-1.0.jar \
+  com.bocom.rdss.spark.sdp3x.starter.SparkSubmitStarter \
+  --spec examples/sql-batch-pipeline
+```
+
+其中入口类 B 是 `com.bocom.rdss.spark.sdp3x.sql.SqlPipelineRunApplication`。在 IDEA 中
+直接运行它并传入下面的参数，会自动使用 `local[*]`：
+
+```text
+--spec examples/sql-batch-pipeline
+```
+
+入口类 A 默认补充 `--master yarn --deploy-mode cluster`，读取 `driver.memory`、
+`driver.cores`、`executor.memory`、`executor.cores`、`executor.num`、`queue` 以及
+`conf.*` 等配置，并自动将整个 Job 目录通过 `--archives` 分发给 cluster driver。
+
 编译和测试：
 
 ```bash
@@ -106,22 +129,10 @@ GROUP BY region, TO_DATE(orderDate);
 ./mvnw package
 ```
 
-查看可用命令：
+查看提交入口帮助：
 
 ```bash
-bin/spark-sdp.sh help
-```
-
-对 SQL 项目做 dry-run：
-
-```bash
-bin/spark-sdp.sh dry-run examples/sql-batch-pipeline
-```
-
-本地 dry-run：
-
-```bash
-bin/spark-sdp.sh dry-run --spec examples/sql-batch-pipeline/spark-pipeline.properties
+bin/spark-sdp.sh --help
 ```
 
 提交到 Yarn 运行：
@@ -130,10 +141,7 @@ bin/spark-sdp.sh dry-run --spec examples/sql-batch-pipeline/spark-pipeline.prope
 export SPARK_HOME=/path/to/your/spark
 
 bin/spark-sdp.sh \
-  --master yarn \
-  --deploy-mode cluster \
-  run \
-  --spec examples/sql-batch-pipeline/spark-pipeline.properties
+  --spec examples/sql-batch-pipeline
 ```
 
 提交到 Yarn `cluster` 模式并通过 Hive metastore 读写 Hive 表时，建议把 `hive-site.xml`
@@ -142,43 +150,28 @@ bin/spark-sdp.sh \
 ```bash
 export SPARK_HOME=/path/to/your/spark
 
-bin/spark-sdp.sh \
-  --master yarn \
-  --deploy-mode cluster \
-  --files /path/to/hive-site.xml \
-  run \
-  --spec examples/sql-hive-insert-pipeline/spark-pipeline.yml
-```
-
-也可以先进入项目目录，再让脚本从当前目录读取 `spark-pipeline.yml`：
-
-```bash
-cd examples/sql-batch-pipeline
-
-../../bin/spark-sdp.sh \
-  --master yarn \
-  --deploy-mode cluster \
-  run
+bin/spark-sdp.sh --spec examples/sql-hive-insert-pipeline
 ```
 
 执行前先打包，并把产物复制到 `bin/` 目录，与脚本同级：
 
 ```bash
-./mvnw package
-cp target/spark-sdp.sh-1.0.jar bin/
+./mvnw -pl spark-core package
+cp spark-core/target/spark-sdp-1.0.jar bin/
 ```
 
-`bin/spark-sdp` 只会读取同目录下的 `spark-sdp-1.0.jar`。`run` 和 `dry-run` 都会通过 `${SPARK_HOME}/bin/spark-submit` 启动，`help` 直接走本地 jar；当使用 `--deploy-mode cluster` 时，脚本会自动把 `spark-pipeline.properties` 和 SQL 目录打包成 archive，随作业一起分发。打包产物里不会包含 `spark-core` 和 `spark-sql`，提交到 Yarn 时会使用 Spark 安装自带的依赖。
+脚本只负责定位 Jar 并转发参数。`SparkSubmitStarter` 读取 YAML、打包 Job 目录并调用
+`${SPARK_HOME}/bin/spark-submit`；Spark 入口类是 `SqlPipelineRunApplication`。
 
 `database` 配置表示这条 pipeline 的默认数据库，效果等同于在执行所有 SQL 之前先做一次
 `USE <database>`。如果 SQL 里已经显式写了库名，例如 `db1.orders_source` 或
 `INSERT INTO TABLE db2.daily_orders_sink`，则以 SQL 自己写的库名为准。
 
-本地调试时可以直接在 IDE 里运行 `com.bocom.rdss.spark.sdp3x.sql.SqlPipelineCliMain` 或
-`com.bocom.rdss.spark.sdp3x.example.SqlPipelineLocalDebugMain`：
+本地调试时可以直接在 IDE 里运行 `com.bocom.rdss.spark.sdp3x.sql.SqlPipelineRunApplication`
+或 `com.bocom.rdss.spark.sdp3x.example.SqlPipelineLocalDebugMain`：
 
 ```text
-run --spec examples/sql-batch-pipeline/spark-pipeline.properties --master local[*]
+--spec examples/sql-batch-pipeline --master local[*]
 ```
 
 之所以同一个 main 同时支持本地和 `spark-sdp`，是因为 `spark-sdp` 提交时会额外传入

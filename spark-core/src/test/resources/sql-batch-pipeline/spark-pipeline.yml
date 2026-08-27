@@ -1,5 +1,0 @@
-name: sql_orders_pipeline
-configuration:
-  spark.sql.shuffle.partitions: "1"
-libraries:
-  - transformations

@@ -30,7 +30,13 @@ public final class SqlPipelineRunApplication {
   private SqlPipelineRunApplication() {
   }
 
-  public static void run(SqlPipelineCliOptions cliOptions) {
+  /** Spark job entrypoint (entrypoint B). Run this main method directly from IDEA for local mode. */
+  public static void main(String[] args) {
+    SqlPipelineRunOptions options = SqlPipelineRunOptions.parse(args);
+    run(options);
+  }
+
+  public static void run(SqlPipelineRunOptions cliOptions) {
     SqlPipelineProjectRunner runner = new SqlPipelineProjectRunner();
     PipelineDefinition pipelineDefinition = runner.compile(cliOptions.projectPath());
     SparkSessionContext sparkSessionContext = createSparkSession(cliOptions, pipelineDefinition);
@@ -76,7 +82,7 @@ public final class SqlPipelineRunApplication {
   }
 
   private static SparkSessionContext createSparkSession(
-      SqlPipelineCliOptions cliOptions,
+      SqlPipelineRunOptions cliOptions,
       PipelineDefinition pipelineDefinition) {
     String localMaster = null;
     if (cliOptions.master() != null) {
@@ -115,7 +121,7 @@ public final class SqlPipelineRunApplication {
   }
 
   private static SparkSession.Builder newSparkBuilder(
-      SqlPipelineCliOptions cliOptions,
+      SqlPipelineRunOptions cliOptions,
       PipelineDefinition pipelineDefinition) {
     SparkSession.Builder sparkBuilder = SparkSession.builder()
       .appName(pipelineDefinition.name())

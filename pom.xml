@@ -32,7 +32,7 @@
         <maven.jar.plugin.version>3.4.2</maven.jar.plugin.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
         <maven.shade.plugin.version>3.5.1</maven.shade.plugin.version>
-        <main.class>com.bocom.rdss.spark.sdp3x.sql.SqlPipelineCliMain</main.class>
+        <main.class>com.bocom.rdss.spark.sdp3x.starter.SparkSubmitStarter</main.class>
         <compile.scope>compile</compile.scope>
     </properties>
 

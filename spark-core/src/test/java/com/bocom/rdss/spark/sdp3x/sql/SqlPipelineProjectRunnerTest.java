@@ -105,53 +105,31 @@ class SqlPipelineProjectRunnerTest {
 
   @Test
   void shouldParseRunCliCommand() {
-    SqlPipelineCliOptions cliOptions = SqlPipelineCliOptions.parse(
-      new String[] {"run", "examples/sql-batch-pipeline", "--master", "local[2]"});
+    SqlPipelineRunOptions cliOptions = SqlPipelineRunOptions.parse(
+      new String[] {"--spec", "examples/sql-batch-pipeline", "--master", "local[2]"});
 
-    assertEquals(SqlPipelineCliOptions.Command.RUN, cliOptions.command());
     assertEquals(Paths.get("examples/sql-batch-pipeline"), cliOptions.projectPath());
     assertEquals("local[2]", cliOptions.master());
   }
 
   @Test
-  void shouldParseDryRunCliCommand() {
-    SqlPipelineCliOptions cliOptions = SqlPipelineCliOptions.parse(
-      new String[] {"dry-run", "examples/sql-batch-pipeline"});
-
-    assertEquals(SqlPipelineCliOptions.Command.DRY_RUN, cliOptions.command());
-    assertEquals(Paths.get("examples/sql-batch-pipeline"), cliOptions.projectPath());
-    assertNull(cliOptions.master());
-  }
-
-  @Test
-  void shouldKeepLegacyDryRunCompatibility() {
-    SqlPipelineCliOptions cliOptions = SqlPipelineCliOptions.parse(
-      new String[] {"examples/sql-batch-pipeline", "--dry-run"});
-
-    assertEquals(SqlPipelineCliOptions.Command.DRY_RUN, cliOptions.command());
-    assertEquals(Paths.get("examples/sql-batch-pipeline"), cliOptions.projectPath());
-  }
-
-  @Test
   void shouldParseSpecPathAndSparkSubmitMarker() {
-    SqlPipelineCliOptions cliOptions = SqlPipelineCliOptions.parse(
-      new String[] {"run", "--spec", "examples/sql-batch-pipeline/spark-pipeline.properties", "--submitted"});
+    SqlPipelineRunOptions cliOptions = SqlPipelineRunOptions.parse(
+      new String[] {"--spec", "examples/sql-batch-pipeline/spark-pipeline.yaml", "--submitted"});
 
-    assertEquals(SqlPipelineCliOptions.Command.RUN, cliOptions.command());
     assertEquals(
-      Paths.get("examples/sql-batch-pipeline/spark-pipeline.properties"),
+      Paths.get("examples/sql-batch-pipeline/spark-pipeline.yaml"),
       cliOptions.projectPath());
     assertTrue(cliOptions.submittedViaSparkSubmit());
   }
 
   @Test
   void shouldParseClusterSubmissionStyleArguments() {
-    SqlPipelineCliOptions cliOptions = SqlPipelineCliOptions.parse(
-      new String[] {"--submitted", "run", "--spec", "spark-sdp.sh-project/spark-pipeline.yml"});
+    SqlPipelineRunOptions cliOptions = SqlPipelineRunOptions.parse(
+      new String[] {"--submitted", "--spec", "spark-sdp.sh-project/spark-pipeline.yaml"});
 
-    assertEquals(SqlPipelineCliOptions.Command.RUN, cliOptions.command());
     assertEquals(
-      Paths.get("spark-sdp.sh-project/spark-pipeline.yml"),
+      Paths.get("spark-sdp.sh-project/spark-pipeline.yaml"),
       cliOptions.projectPath());
     assertTrue(cliOptions.submittedViaSparkSubmit());
   }

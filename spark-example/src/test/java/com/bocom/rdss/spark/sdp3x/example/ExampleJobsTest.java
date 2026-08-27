@@ -67,7 +67,7 @@ class ExampleJobsTest {
   void sqlPipelineLocalDebugMainShouldHandleProvidedArgs() throws URISyntaxException {
     Path projectRoot = Paths.get(ExampleJobsTest.class.getResource("/sql-batch-pipeline").toURI());
 
-    SqlPipelineLocalDebugMain.main(new String[] {"dry-run", projectRoot.toString()});
+    SqlPipelineLocalDebugMain.main(new String[] {"--spec", projectRoot.toString(), "--master", "local[1]"});
   }
 
   @Test

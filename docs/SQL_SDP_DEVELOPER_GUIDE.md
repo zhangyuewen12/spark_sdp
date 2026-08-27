@@ -4,13 +4,13 @@
 
 当前版本支持：
 
-- `spark-pipeline.yml` 项目配置
+- `spark-pipeline.yaml` 项目配置
 - `transformations/*.sql` SQL 开发方式
 - `CREATE MATERIALIZED VIEW ... AS SELECT ...`
 - `CREATE TEMPORARY VIEW ... AS SELECT ...`
 - `INSERT INTO [TABLE] target SELECT ...`
 - `SET key=value;` 为下一条 SQL flow 设置局部 Spark 参数
-- `run` / `dry-run` 命令
+- 生产提交与 IDEA 本地运行
 - 本地 Spark 批处理运行
 - 基于 `SPARK_HOME` 的 `spark-submit` 提交入口
 - `cluster` 模式自动分发 pipeline 项目
@@ -22,7 +22,7 @@
 
 ```text
 my-pipeline/
-  spark-pipeline.yml
+  spark-pipeline.yaml
   transformations/
     000_seed_orders.sql
     010_clean_orders.sql
@@ -31,7 +31,7 @@ my-pipeline/
 
 说明：
 
-- `spark-pipeline.yml`：pipeline 顶层配置
+- `spark-pipeline.yaml`：pipeline 顶层配置
 - `transformations/`：存放 SQL 文件
 - 一个 SQL 文件通常定义一个结果数据集
 - 文件名前缀建议带顺序号，便于人读和排查
@@ -40,7 +40,7 @@ my-pipeline/
 
 ```text
 examples/sql-batch-pipeline/
-  spark-pipeline.yml
+  spark-pipeline.yaml
   transformations/
     000_seed_orders.sql
     010_clean_orders.sql
@@ -51,14 +51,14 @@ examples/sql-batch-pipeline/
 
 ```text
 examples/sql-hive-insert-pipeline/
-  spark-pipeline.yml
+  spark-pipeline.yaml
   transformations/
     010_insert_daily_orders.sql
 ```
 
 ## 2. 配置文件写法
 
-示例 `spark-pipeline.yml`：
+示例 `spark-pipeline.yaml`：
 
 ```yaml
 name: sql_orders_pipeline
@@ -192,7 +192,7 @@ WHERE amount > 0;
 
 规则说明：
 
-- `spark-pipeline.yml` 里的 `configuration` 仍然是整条 pipeline 的默认配置
+- `spark-pipeline.yaml` 里的 `configuration` 仍然是整条 pipeline 的默认配置
 - `SET key=value;` 只作用于它后面的那一条 `CREATE ... AS SELECT ...` 或 `INSERT INTO ... SELECT ...`
 - 多个连续的 `SET` 会叠加到同一个 flow
 - 该 flow 执行完成后，这些局部配置会自动恢复，不会污染后续 flow
@@ -216,9 +216,9 @@ WHERE amount > 0;
 
 - 上游输入表已经在 Hive 中建好
 - 目标表已经在 Hive 中建好，或者由 `CREATE MATERIALIZED VIEW` 自动落表
-- `spark-pipeline.yml` 里通过 `database` 指定默认库
+- `spark-pipeline.yaml` 里通过 `database` 指定默认库
 
-### 第二步：编写 `spark-pipeline.yml`
+### 第二步：编写 `spark-pipeline.yaml`
 
 至少要写：
 
@@ -233,14 +233,15 @@ WHERE amount > 0;
 - 文件名使用数字前缀
 - 中间层和结果层分文件管理
 
-### 第四步：先做 dry-run
+### 第四步：检查执行计划
 
 在真正执行前，建议先看执行计划：
 
-```bash
-./mvnw package
+在单元测试或开发工具中调用：
 
-bin/spark-sdp.sh dry-run --spec examples/sql-batch-pipeline/spark-pipeline.yml
+```java
+SqlPipelinePlanSupport.print(
+    SqlPipelinePlanSupport.plan(Paths.get("examples/sql-batch-pipeline")));
 ```
 
 预期输出类似：
@@ -275,27 +276,20 @@ Stage 1:
 export SPARK_HOME=/path/to/your/spark
 
 bin/spark-sdp.sh \
-  --master yarn \
-  --deploy-mode client \
-  run \
-  --spec examples/sql-batch-pipeline/spark-pipeline.yml
+  --spec examples/sql-batch-pipeline
 ```
 
 如果提交到 Yarn `cluster` 模式，并且你的 Hive 配置依赖 `hive-site.xml`，可以这样：
 
 ```bash
 bin/spark-sdp.sh \
-  --master yarn \
-  --deploy-mode cluster \
-  --files /path/to/hive-site.xml \
-  run \
-  --spec examples/sql-hive-insert-pipeline/spark-pipeline.yml
+  --spec examples/sql-hive-insert-pipeline
 ```
 
 如果你想先看帮助信息：
 
 ```bash
-bin/spark-sdp.sh help
+bin/spark-sdp.sh --help
 ```
 
 先执行打包，并把产物复制到 `bin/` 目录：
@@ -307,37 +301,23 @@ cp target/spark-sdp.sh-1.0.jar bin/
 
 `bin/spark-sdp` 只会读取同目录下的 `spark-sdp-1.0.jar`。其中：
 
-- `run` 会通过 `${SPARK_HOME}/bin/spark-submit` 提交
-- `dry-run` 也会通过 `${SPARK_HOME}/bin/spark-submit` 启动
-- `help` 直接走本地 jar
-- `--deploy-mode cluster` 时会自动把 `spark-pipeline.yml` 和 SQL 目录打包随作业分发
+- `SparkSubmitStarter` 会通过 `${SPARK_HOME}/bin/spark-submit` 提交
+- `--help` 直接由 `SparkSubmitStarter` 输出
+- `--deploy-mode cluster` 时会自动把 `spark-pipeline.yaml` 和 SQL 目录打包随作业分发
 - `spark-sdp-1.0.jar` 不包含 `spark-core` 和 `spark-sql`，提交到 Yarn 时会使用 Spark 安装自带的依赖
 - 运行时会启用 Hive support，所以只要 Spark 环境里 metastore 配置可用，SQL 就能直接读写 Hive 表
-
-如果你已经 `cd` 到 pipeline 目录下，也可以省略 `--spec`：
-
-```bash
-cd examples/sql-batch-pipeline
-
-../../bin/spark-sdp.sh \
-  --master yarn \
-  --deploy-mode cluster \
-  run
-```
-
-此时脚本只会在当前目录下查找 `spark-pipeline.yml` / `spark-pipeline.yaml`。
 
 ## 5.4 本地 Main 调试
 
 当你需要在 IDE 里打断点排查逻辑时，可以直接运行下面任一 main：
 
-- `com.bocom.rdss.spark.sdp3x.sql.SqlPipelineCliMain`
+- `com.bocom.rdss.spark.sdp3x.sql.SqlPipelineRunApplication`
 - `com.bocom.rdss.spark.sdp3x.example.SqlPipelineLocalDebugMain`
 
 推荐传参：
 
 ```text
-run --spec examples/sql-batch-pipeline/spark-pipeline.yml --master local[*]
+--spec examples/sql-batch-pipeline --master local[*]
 ```
 
 如果你运行的是 `SqlPipelineLocalDebugMain`，不传参数时也会默认执行上面的本地样例。
@@ -432,7 +412,7 @@ transformations/
 1. 先运行仓库自带 demo
 2. 再复制 `examples/sql-batch-pipeline`
 3. 修改 SQL 指向自己的源表
-4. 先做 `dry-run`
+4. 通过 `SqlPipelinePlanSupport` 检查执行计划
 5. 再正式运行
 
 这样最容易定位问题，也最符合当前 MVP 的设计边界。

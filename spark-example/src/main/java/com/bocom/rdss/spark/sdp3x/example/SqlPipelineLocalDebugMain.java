@@ -1,6 +1,6 @@
 package com.bocom.rdss.spark.sdp3x.example;
 
-import com.bocom.rdss.spark.sdp3x.sql.SqlPipelineCliMain;
+import com.bocom.rdss.spark.sdp3x.sql.SqlPipelineRunApplication;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,8 +15,7 @@ public final class SqlPipelineLocalDebugMain {
 
   public static void main(String[] args) {
     if (args.length == 0) {
-      SqlPipelineCliMain.main(new String[] {
-        "run",
+      SqlPipelineRunApplication.main(new String[] {
         "--spec",
         resolveDefaultSpec().toString(),
         "--master",
@@ -24,18 +23,18 @@ public final class SqlPipelineLocalDebugMain {
       });
       return;
     }
-    SqlPipelineCliMain.main(args);
+    SqlPipelineRunApplication.main(args);
   }
 
   private static Path resolveDefaultSpec() {
     Path currentDirectory = Paths.get("").toAbsolutePath().normalize();
-    Path fromCurrent = currentDirectory.resolve("examples/sql-batch-pipeline/spark-pipeline.properties");
+    Path fromCurrent = currentDirectory.resolve("examples/sql-batch-pipeline/spark-pipeline.yaml");
     if (Files.exists(fromCurrent)) {
       return fromCurrent;
     }
     Path fromParent = currentDirectory.getParent() == null
       ? fromCurrent
-      : currentDirectory.getParent().resolve("examples/sql-batch-pipeline/spark-pipeline.properties");
+      : currentDirectory.getParent().resolve("examples/sql-batch-pipeline/spark-pipeline.yaml");
     return fromParent;
   }
 }

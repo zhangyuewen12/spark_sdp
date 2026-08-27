@@ -12,25 +12,18 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 
 /**
- * Loads a minimal SQL pipeline project spec from {@code spark-pipeline.properties}.
+ * Loads a SQL pipeline project spec from {@code spark-pipeline.yaml}.
  */
 public final class SqlPipelineProjectSpecLoader {
-  private static final String[] SPEC_FILES = {
-    "spark-pipeline.properties",
-    "spark-pipeline.yml",
-    "spark-pipeline.yaml"
-  };
+  private static final String SPEC_FILE = "spark-pipeline.yaml";
 
   public SqlPipelineProjectSpec load(Path projectRootOrSpecPath) {
     Path specPath = resolveSpecPath(projectRootOrSpecPath);
     Path normalizedRoot = specPath.getParent().toAbsolutePath().normalize();
 
-    ParsedSpec parsedSpec = specPath.getFileName().toString().endsWith(".properties")
-      ? readPropertiesSpec(specPath, normalizedRoot)
-      : readYamlSpec(specPath, normalizedRoot);
+    ParsedSpec parsedSpec = readYamlSpec(specPath, normalizedRoot);
     return new SqlPipelineProjectSpec(
       normalizedRoot,
       parsedSpec.name,
@@ -43,6 +36,10 @@ public final class SqlPipelineProjectSpecLoader {
   private Path resolveSpecPath(Path projectRootOrSpecPath) {
     Path normalizedPath = projectRootOrSpecPath.toAbsolutePath().normalize();
     if (Files.isRegularFile(normalizedPath)) {
+      if (!SPEC_FILE.equals(normalizedPath.getFileName().toString())) {
+        throw new SqlPipelineProjectException(
+          "SQL pipeline spec file must be named " + SPEC_FILE + ": " + normalizedPath);
+      }
       return normalizedPath;
     }
 
@@ -56,42 +53,12 @@ public final class SqlPipelineProjectSpecLoader {
   }
 
   private Path findSpecInDirectory(Path directory) {
-    List<Path> foundFiles = new ArrayList<>();
-    for (String specFile : SPEC_FILES) {
-      Path candidate = directory.resolve(specFile);
-      if (Files.isRegularFile(candidate)) {
-        foundFiles.add(candidate);
-      }
-    }
-
-    if (foundFiles.size() == 1) {
-      return foundFiles.get(0);
-    }
-    if (foundFiles.size() > 1) {
-      throw new SqlPipelineProjectException(
-        "Multiple SQL pipeline spec files found under: " + directory
-          + ". Expected only one of " + String.join(", ", SPEC_FILES));
+    Path specPath = directory.resolve(SPEC_FILE);
+    if (Files.isRegularFile(specPath)) {
+      return specPath;
     }
     throw new SqlPipelineProjectException(
-      "Missing SQL pipeline spec file under: " + directory
-        + ". Expected one of " + String.join(", ", SPEC_FILES));
-  }
-
-  private ParsedSpec readPropertiesSpec(Path specPath, Path projectRoot) {
-    Properties properties = new Properties();
-    try (InputStream inputStream = Files.newInputStream(specPath)) {
-      properties.load(inputStream);
-    } catch (IOException e) {
-      throw new SqlPipelineProjectException(
-        "Failed to read SQL pipeline spec: " + specPath, e);
-    }
-
-    String name = stringValue(properties.getProperty("name"), projectRoot.getFileName().toString());
-    String catalog = nullableStringValue(properties.getProperty("catalog"));
-    String database = nullableStringValue(properties.getProperty("database"));
-    Map<String, String> configuration = readPropertiesConfiguration(properties);
-    List<Path> sqlDirectories = readPropertiesSqlDirectories(projectRoot, properties);
-    return new ParsedSpec(name, catalog, database, configuration, sqlDirectories);
+      "Missing " + SPEC_FILE + " under: " + directory);
   }
 
   private ParsedSpec readYamlSpec(Path specPath, Path projectRoot) {
@@ -134,20 +101,6 @@ public final class SqlPipelineProjectSpecLoader {
     @SuppressWarnings("unchecked")
     Map<Object, Object> rawMap = (Map<Object, Object>) rawConfiguration;
     rawMap.forEach((key, value) -> configuration.put(String.valueOf(key), String.valueOf(value)));
-    return configuration;
-  }
-
-  private Map<String, String> readPropertiesConfiguration(Properties properties) {
-    LinkedHashMap<String, String> configuration = new LinkedHashMap<>();
-    properties.stringPropertyNames().stream()
-      .filter(key -> key.startsWith("configuration."))
-      .sorted()
-      .forEach(key -> {
-        String configurationKey = key.substring("configuration.".length()).trim();
-        if (!configurationKey.isEmpty()) {
-          configuration.put(configurationKey, properties.getProperty(key));
-        }
-      });
     return configuration;
   }
 
@@ -200,36 +153,6 @@ public final class SqlPipelineProjectSpecLoader {
       return resolveAgainstRoot(projectRoot, String.valueOf(path));
     }
     throw new SqlPipelineProjectException("Unsupported SQL library entry: " + rawLibrary);
-  }
-
-  private List<Path> readPropertiesSqlDirectories(Path projectRoot, Properties properties) {
-    String rawLibraries = nullableStringValue(properties.getProperty("libraries"));
-    List<Path> sqlDirectories = new ArrayList<>();
-    if (rawLibraries == null) {
-      sqlDirectories.add(projectRoot.resolve("transformations"));
-    } else {
-      for (String library : rawLibraries.split(",")) {
-        String normalized = library.trim();
-        if (!normalized.isEmpty()) {
-          sqlDirectories.add(resolveAgainstRoot(projectRoot, normalized));
-        }
-      }
-    }
-
-    if (sqlDirectories.isEmpty()) {
-      throw new SqlPipelineProjectException("At least one SQL library directory is required");
-    }
-
-    List<Path> normalizedDirectories = new ArrayList<>();
-    for (Path sqlDirectory : sqlDirectories) {
-      Path normalized = sqlDirectory.toAbsolutePath().normalize();
-      if (!Files.exists(normalized) || !Files.isDirectory(normalized)) {
-        throw new SqlPipelineProjectException(
-          "SQL library directory does not exist: " + normalized);
-      }
-      normalizedDirectories.add(normalized);
-    }
-    return normalizedDirectories;
   }
 
   private Path resolveAgainstRoot(Path projectRoot, String pathText) {
