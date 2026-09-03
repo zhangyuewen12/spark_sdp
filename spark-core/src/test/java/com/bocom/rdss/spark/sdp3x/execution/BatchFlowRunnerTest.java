@@ -74,7 +74,7 @@ class BatchFlowRunnerTest {
   }
 
   @Test
-  void shouldInsertIntoConfiguredTables() throws Exception {
+  void shouldNotWriteSparkSqlStatementResultAgain() throws Exception {
     BatchFlowRunner runner = new BatchFlowRunner();
     ImmutableFlowDefinition flow = ImmutableFlowDefinition.batchFlow(
       "daily_orders",
@@ -84,17 +84,15 @@ class BatchFlowRunnerTest {
     when(runtime.spark()).thenReturn(sparkSession);
     when(sparkSession.conf()).thenReturn(runtimeConfig);
     when(dataset.isStreaming()).thenReturn(false);
-    when(dataset.write()).thenReturn(writer);
-    when(writer.mode("append")).thenReturn(writer);
 
     runner.run(
       flow,
       ImmutableDatasetDefinition.table("daily_orders")
-        .withProperty(SqlPipelineDatasetProperties.WRITE_MODE, SqlPipelineDatasetProperties.WRITE_MODE_INSERT_INTO),
+        .withProperty(SqlPipelineDatasetProperties.EXECUTION_MODE, SqlPipelineDatasetProperties.EXECUTION_MODE_SQL_STATEMENT),
       runtime,
       ExecutionOptions.defaults());
 
-    verify(writer).insertInto("daily_orders");
+    verify(dataset, never()).write();
   }
 
   @Test

@@ -98,7 +98,7 @@ class ScopeAndMaterializerTest {
       ExecutionOptions.defaults());
     materializer.materialize(
       ImmutableDatasetDefinition.table("daily_orders")
-        .withProperty(SqlPipelineDatasetProperties.WRITE_MODE, SqlPipelineDatasetProperties.WRITE_MODE_INSERT_INTO),
+        .withProperty(SqlPipelineDatasetProperties.EXECUTION_MODE, SqlPipelineDatasetProperties.EXECUTION_MODE_SQL_STATEMENT),
       runtime,
       ExecutionOptions.defaults());
     materializer.materialize(

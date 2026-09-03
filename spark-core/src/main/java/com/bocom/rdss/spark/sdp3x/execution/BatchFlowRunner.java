@@ -55,19 +55,21 @@ public final class BatchFlowRunner implements FlowRunner {
           "Batch-only SDP module does not support streaming datasets: " + flowDefinition.name());
       }
 
+      // SQL statements such as INSERT INTO perform their own write through Spark SQL.
+      // The returned Dataset is only Spark's command result and must not be written again.
+      if (SqlPipelineDatasetProperties.EXECUTION_MODE_SQL_STATEMENT.equals(
+          datasetDefinition.properties().get(SqlPipelineDatasetProperties.EXECUTION_MODE))) {
+        return FlowExecutionResult.completed(flowDefinition.name(), datasetDefinition.name());
+      }
+
       // Temporary views stay inside the current Spark application; persisted datasets go to table
       // storage through standard Spark writes.
       if (datasetDefinition.kind() == DatasetKind.TEMPORARY_VIEW) {
         data.createOrReplaceTempView(datasetDefinition.name());
       } else {
-        String writeMode = datasetDefinition.properties().get(SqlPipelineDatasetProperties.WRITE_MODE);
-        if (SqlPipelineDatasetProperties.WRITE_MODE_INSERT_INTO.equals(writeMode)) {
-          data.write().mode("append").insertInto(datasetDefinition.name());
-        } else {
-          DataFrameWriter<Row> writer = data.write().mode(executionOptions.materializedViewSaveMode());
-          datasetDefinition.format().ifPresent(format -> writer.format(format));
-          writer.saveAsTable(datasetDefinition.name());
-        }
+        DataFrameWriter<Row> writer = data.write().mode(executionOptions.materializedViewSaveMode());
+        datasetDefinition.format().ifPresent(format -> writer.format(format));
+        writer.saveAsTable(datasetDefinition.name());
       }
       return FlowExecutionResult.completed(flowDefinition.name(), datasetDefinition.name());
     }

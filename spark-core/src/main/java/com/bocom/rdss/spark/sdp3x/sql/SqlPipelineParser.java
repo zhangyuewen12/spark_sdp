@@ -27,7 +27,7 @@ public final class SqlPipelineParser {
   private static final Pattern INSERT_INTO_PATTERN = Pattern.compile(
     "(?is)^INSERT\\s+INTO\\s+(?:TABLE\\s+)?"
       + "((?:`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)(?:\\s*\\.\\s*(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*))*)"
-      + "\\s+(SELECT\\b.*)$");
+      + "\\s+.+$");
   private static final Pattern SET_PATTERN = Pattern.compile(
     "(?is)^SET\\s+([A-Za-z0-9._-]+)\\s*=\\s*(.*?)\\s*$");
   private static final Pattern INPUT_DATASET_PATTERN = Pattern.compile(
@@ -78,22 +78,21 @@ public final class SqlPipelineParser {
         extractInputDatasets(querySql),
         sqlFile,
         statementIndex,
-        SqlPipelineDefinition.WriteMode.SAVE_AS_TABLE,
+        SqlPipelineDefinition.ExecutionMode.QUERY_RESULT,
         sparkConf);
     }
 
     matcher = INSERT_INTO_PATTERN.matcher(statement);
     if (matcher.matches()) {
       String datasetName = normalizeIdentifier(matcher.group(1));
-      String querySql = matcher.group(2).trim();
       return new SqlPipelineDefinition(
         datasetName,
         DatasetKind.TABLE,
-        querySql,
-        extractInputDatasets(querySql),
+        statement,
+        extractInputDatasets(statement),
         sqlFile,
         statementIndex,
-        SqlPipelineDefinition.WriteMode.INSERT_INTO,
+        SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT,
         sparkConf);
     }
 

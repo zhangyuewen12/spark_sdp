@@ -13,9 +13,9 @@ import java.util.Set;
  * Holds one parsed SQL dataset definition before it is translated to the Java pipeline model.
  */
 public final class SqlPipelineDefinition {
-  public enum WriteMode {
-    SAVE_AS_TABLE,
-    INSERT_INTO
+  public enum ExecutionMode {
+    QUERY_RESULT,
+    SQL_STATEMENT
   }
 
   private final String datasetName;
@@ -24,7 +24,7 @@ public final class SqlPipelineDefinition {
   private final Set<String> inputDatasets;
   private final Path sourceFile;
   private final int statementIndex;
-  private final WriteMode writeMode;
+  private final ExecutionMode executionMode;
   private final Map<String, String> sparkConf;
 
   public SqlPipelineDefinition(
@@ -34,7 +34,7 @@ public final class SqlPipelineDefinition {
       Set<String> inputDatasets,
       Path sourceFile,
       int statementIndex,
-      WriteMode writeMode,
+      ExecutionMode executionMode,
       Map<String, String> sparkConf) {
     this.datasetName = datasetName;
     this.datasetKind = datasetKind;
@@ -42,7 +42,7 @@ public final class SqlPipelineDefinition {
     this.inputDatasets = Collections.unmodifiableSet(new LinkedHashSet<>(inputDatasets));
     this.sourceFile = sourceFile;
     this.statementIndex = statementIndex;
-    this.writeMode = writeMode;
+    this.executionMode = executionMode;
     this.sparkConf = Collections.unmodifiableMap(new LinkedHashMap<>(sparkConf));
   }
 
@@ -70,8 +70,8 @@ public final class SqlPipelineDefinition {
     return statementIndex;
   }
 
-  public WriteMode writeMode() {
-    return writeMode;
+  public ExecutionMode executionMode() {
+    return executionMode;
   }
 
   public Map<String, String> sparkConf() {

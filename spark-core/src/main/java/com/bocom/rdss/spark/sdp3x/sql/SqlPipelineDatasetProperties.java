@@ -6,9 +6,9 @@ package com.bocom.rdss.spark.sdp3x.sql;
 public final class SqlPipelineDatasetProperties {
   public static final String SOURCE_FILE = "sql.source.file";
   public static final String STATEMENT_INDEX = "sql.statement.index";
-  public static final String WRITE_MODE = "sql.write.mode";
-  public static final String WRITE_MODE_SAVE_AS_TABLE = "save_as_table";
-  public static final String WRITE_MODE_INSERT_INTO = "insert_into";
+  public static final String EXECUTION_MODE = "sql.execution.mode";
+  public static final String EXECUTION_MODE_QUERY_RESULT = "query_result";
+  public static final String EXECUTION_MODE_SQL_STATEMENT = "sql_statement";
 
   private SqlPipelineDatasetProperties() {
   }

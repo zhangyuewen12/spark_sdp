@@ -39,8 +39,8 @@ public final class DefaultDatasetMaterializer implements DatasetMaterializer {
       PipelineRuntime runtime,
       ExecutionOptions executionOptions) {
     if (datasetDefinition.kind() == DatasetKind.TEMPORARY_VIEW
-        || SqlPipelineDatasetProperties.WRITE_MODE_INSERT_INTO.equals(
-          datasetDefinition.properties().get(SqlPipelineDatasetProperties.WRITE_MODE))
+        || SqlPipelineDatasetProperties.EXECUTION_MODE_SQL_STATEMENT.equals(
+          datasetDefinition.properties().get(SqlPipelineDatasetProperties.EXECUTION_MODE))
         || !datasetDefinition.schema().isPresent()) {
       return;
     }

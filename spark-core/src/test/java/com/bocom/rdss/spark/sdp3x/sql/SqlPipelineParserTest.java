@@ -43,7 +43,7 @@ class SqlPipelineParserTest {
     assertEquals("ods.orders_clean", tempView.datasetName());
     assertEquals(DatasetKind.TEMPORARY_VIEW, tempView.datasetKind());
     assertEquals(7, tempView.statementIndex());
-    assertEquals(SqlPipelineDefinition.WriteMode.SAVE_AS_TABLE, tempView.writeMode());
+    assertEquals(SqlPipelineDefinition.ExecutionMode.QUERY_RESULT, tempView.executionMode());
     assertEquals("raw.orders_source", tempView.inputDatasets().iterator().next());
     assertTrue(tempView.inputDatasets().contains("dim.region_info"));
 
@@ -51,7 +51,8 @@ class SqlPipelineParserTest {
     assertEquals("analytics.daily_orders", insertInto.datasetName());
     assertEquals(DatasetKind.TABLE, insertInto.datasetKind());
     assertEquals(8, insertInto.statementIndex());
-    assertEquals(SqlPipelineDefinition.WriteMode.INSERT_INTO, insertInto.writeMode());
+    assertEquals(SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT, insertInto.executionMode());
+    assertTrue(insertInto.querySql().startsWith("INSERT INTO TABLE analytics.daily_orders"));
     assertEquals("ods.orders_clean", insertInto.inputDatasets().iterator().next());
   }
 

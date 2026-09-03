@@ -100,10 +100,10 @@ public final class SqlPipelineProjectCompiler {
       .withProperty(SqlPipelineDatasetProperties.SOURCE_FILE, relativePath.toString())
       .withProperty(SqlPipelineDatasetProperties.STATEMENT_INDEX, String.valueOf(definition.statementIndex()))
       .withProperty(
-        SqlPipelineDatasetProperties.WRITE_MODE,
-        definition.writeMode() == SqlPipelineDefinition.WriteMode.INSERT_INTO
-          ? SqlPipelineDatasetProperties.WRITE_MODE_INSERT_INTO
-          : SqlPipelineDatasetProperties.WRITE_MODE_SAVE_AS_TABLE);
+        SqlPipelineDatasetProperties.EXECUTION_MODE,
+        definition.executionMode() == SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT
+          ? SqlPipelineDatasetProperties.EXECUTION_MODE_SQL_STATEMENT
+          : SqlPipelineDatasetProperties.EXECUTION_MODE_QUERY_RESULT);
   }
 
   private String flowName(SqlPipelineDefinition definition) {

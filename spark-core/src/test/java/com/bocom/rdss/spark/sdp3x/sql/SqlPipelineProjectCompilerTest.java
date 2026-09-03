@@ -48,7 +48,7 @@ class SqlPipelineProjectCompilerTest {
       Collections.singleton("raw.orders"),
       first,
       1,
-      SqlPipelineDefinition.WriteMode.SAVE_AS_TABLE,
+      SqlPipelineDefinition.ExecutionMode.QUERY_RESULT,
       Collections.singletonMap("spark.sql.shuffle.partitions", "4"))));
     when(parser.parse(second, 2)).thenReturn(Arrays.asList(
       new SqlPipelineDefinition(
@@ -58,7 +58,7 @@ class SqlPipelineProjectCompilerTest {
         Collections.singleton("raw.orders"),
         second,
         2,
-        SqlPipelineDefinition.WriteMode.SAVE_AS_TABLE,
+        SqlPipelineDefinition.ExecutionMode.QUERY_RESULT,
         Collections.<String, String>emptyMap()),
       new SqlPipelineDefinition(
         "ads.daily_orders",
@@ -67,7 +67,7 @@ class SqlPipelineProjectCompilerTest {
         Collections.singleton("ods.order$detail"),
         second,
         3,
-        SqlPipelineDefinition.WriteMode.INSERT_INTO,
+        SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT,
         new LinkedHashMap<String, String>() {{
           put("spark.sql.shuffle.partitions", "2");
           put("spark.sql.autoBroadcastJoinThreshold", "-1");
@@ -80,14 +80,14 @@ class SqlPipelineProjectCompilerTest {
     assertEquals(3, pipeline.flows().size());
     assertEquals("1", pipeline.configuration().get("spark.sql.shuffle.partitions"));
     DatasetDefinition tempDataset = pipeline.dataset("ods.order$detail").orElseThrow(AssertionError::new);
-    assertEquals(SqlPipelineDatasetProperties.WRITE_MODE_SAVE_AS_TABLE,
-      tempDataset.properties().get(SqlPipelineDatasetProperties.WRITE_MODE));
+    assertEquals(SqlPipelineDatasetProperties.EXECUTION_MODE_QUERY_RESULT,
+      tempDataset.properties().get(SqlPipelineDatasetProperties.EXECUTION_MODE));
     assertEquals("transformations/001_seed.sql",
       tempDataset.properties().get(SqlPipelineDatasetProperties.SOURCE_FILE));
 
     DatasetDefinition tableDataset = pipeline.dataset("ads.daily_orders").orElseThrow(AssertionError::new);
-    assertEquals(SqlPipelineDatasetProperties.WRITE_MODE_INSERT_INTO,
-      tableDataset.properties().get(SqlPipelineDatasetProperties.WRITE_MODE));
+    assertEquals(SqlPipelineDatasetProperties.EXECUTION_MODE_SQL_STATEMENT,
+      tableDataset.properties().get(SqlPipelineDatasetProperties.EXECUTION_MODE));
     assertEquals("3", tableDataset.properties().get(SqlPipelineDatasetProperties.STATEMENT_INDEX));
     assertTrue(pipeline.flow("sql_flow_001_ods.order_detail").isPresent());
     assertTrue(pipeline.flow("sql_flow_003_ads.daily_orders").isPresent());
