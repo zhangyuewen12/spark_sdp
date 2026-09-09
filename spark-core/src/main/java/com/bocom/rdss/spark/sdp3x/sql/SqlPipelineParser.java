@@ -28,6 +28,9 @@ public final class SqlPipelineParser {
     "(?is)^INSERT\\s+INTO\\s+(?:TABLE\\s+)?"
       + "((?:`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)(?:\\s*\\.\\s*(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*))*)"
       + "\\s+.+$");
+  private static final Pattern TRUNCATE_TABLE_PATTERN = Pattern.compile(
+    "(?is)^TRUNCATE\\s+TABLE\\s+"
+      + "((?:`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)(?:\\s*\\.\\s*(?:`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*))*)\\s*$");
   private static final Pattern SET_PATTERN = Pattern.compile(
     "(?is)^SET\\s+([A-Za-z0-9._-]+)\\s*=\\s*(.*?)\\s*$");
   private static final Pattern INPUT_DATASET_PATTERN = Pattern.compile(
@@ -94,6 +97,14 @@ public final class SqlPipelineParser {
         statementIndex,
         SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT,
         sparkConf);
+    }
+
+    matcher = TRUNCATE_TABLE_PATTERN.matcher(statement);
+    if (matcher.matches()) {
+      return new SqlPipelineDefinition(
+        normalizeIdentifier(matcher.group(1)), DatasetKind.TABLE, statement,
+        java.util.Collections.emptySet(), sqlFile, statementIndex,
+        SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT, sparkConf);
     }
 
     throw new SqlPipelineProjectException(

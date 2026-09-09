@@ -49,7 +49,7 @@ public final class SqlPipelineRunApplication {
           pipelineDefinition,
           sparkSessionContext.localWarehouseDirectory());
       }
-      ExecutionReport report = new PipelineOrchestrator().run(
+      ExecutionReport report = new PipelineOrchestrator().runInDeclarationOrder(
         pipelineDefinition,
         sparkSession,
         ExecutionOptions.defaults());

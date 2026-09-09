@@ -78,6 +78,8 @@ public final class SparkSubmitStarter {
   private static void appendSubmitOptions(List<String> command, Map<String, String> config) {
     append(command, "--master", value(config, "master", null, "yarn"));
     append(command, "--deploy-mode", value(config, "deploy-mode", "deployMode", "cluster"));
+    // Keep the Yarn application name identical to the pipeline name declared in the job YAML.
+    appendKnown(command, config, "name", "--name");
     appendKnown(command, config, "queue", "--queue");
     appendKnown(command, config, "driver.memory", "--driver-memory");
     appendKnown(command, config, "driver.cores", "--driver-cores");

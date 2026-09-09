@@ -28,11 +28,12 @@ public final class SqlPipelineProjectRunner {
   }
 
   public ExecutionPlan dryRun(Path projectRoot) {
-    return new PipelineOrchestrator().plan(compile(projectRoot));
+    return new PipelineOrchestrator().planInDeclarationOrder(compile(projectRoot));
   }
 
   public ExecutionReport run(Path projectRoot, SparkSession sparkSession,
       ExecutionOptions executionOptions) {
-    return new PipelineOrchestrator().run(compile(projectRoot), sparkSession, executionOptions);
+    return new PipelineOrchestrator().runInDeclarationOrder(
+      compile(projectRoot), sparkSession, executionOptions);
   }
 }

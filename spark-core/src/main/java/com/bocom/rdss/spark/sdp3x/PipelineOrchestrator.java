@@ -29,6 +29,9 @@ import com.bocom.rdss.spark.sdp3x.graph.DependencyGraph;
 import com.bocom.rdss.spark.sdp3x.planning.ExecutionPlan;
 import com.bocom.rdss.spark.sdp3x.planning.PipelinePlanner;
 import com.bocom.rdss.spark.sdp3x.planning.TopologicalPipelinePlanner;
+import com.bocom.rdss.spark.sdp3x.planning.ExecutionStage;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Coordinates dependency analysis, planning, and execution for one pipeline.
@@ -66,5 +69,25 @@ public final class PipelineOrchestrator {
       SparkSession sparkSession,
       ExecutionOptions executionOptions) {
     return pipelineExecutor.execute(plan(pipelineDefinition), sparkSession, executionOptions);
+  }
+
+  /** Executes flows in the order declared by the pipeline, one flow per stage. */
+  public ExecutionReport runInDeclarationOrder(
+      PipelineDefinition pipelineDefinition,
+      SparkSession sparkSession,
+      ExecutionOptions executionOptions) {
+    return pipelineExecutor.execute(
+      planInDeclarationOrder(pipelineDefinition), sparkSession, executionOptions);
+  }
+
+  /** Plans flows in declaration order, retaining dependency analysis for validation. */
+  public ExecutionPlan planInDeclarationOrder(PipelineDefinition pipelineDefinition) {
+    DependencyGraph graph = dependencyAnalyzer.analyze(pipelineDefinition);
+    List<ExecutionStage> stages = new ArrayList<>();
+    int index = 0;
+    for (com.bocom.rdss.spark.sdp3x.api.FlowDefinition flow : pipelineDefinition.flows()) {
+      stages.add(new ExecutionStage(index++, java.util.Collections.singletonList(flow)));
+    }
+    return new ExecutionPlan(pipelineDefinition, graph, stages);
   }
 }

@@ -1,7 +1,7 @@
 ----------------------------------------------------------------
-Thu Jun 11 17:14:46 CST 2026:
-Booting Derby version The Apache Software Foundation - Apache Derby - 10.14.2.0 - (1828579): instance a816c00e-019e-b5f6-6f18-0000c1bc86d0 
-on database directory /private/var/folders/qw/vvbp2svx6vzgss7ckzkhm1th0000gn/T/junit3339129704554682726/default-project/target/metastore_db_83192800887791 with class loader org.apache.spark.sql.hive.client.IsolatedClientLoader$$anon$1@17133f49 
+Mon Sep 07 08:48:37 CST 2026:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.14.2.0 - (1828579): instance a816c00e-01a0-7956-a74e-0000af498b78 
+on database directory /private/var/folders/qw/vvbp2svx6vzgss7ckzkhm1th0000gn/T/sql-pipeline-runner-test-warehouse8473665677392625882/metastore_db with class loader org.apache.spark.sql.hive.client.IsolatedClientLoader$$anon$1@1189f5e2 
 Loaded from file:/Users/ywzhang/.m2/repository/org/apache/derby/derby/10.14.2.0/derby-10.14.2.0.jar
 java.vendor=Oracle Corporation
 java.runtime.version=1.8.0_451-b10
