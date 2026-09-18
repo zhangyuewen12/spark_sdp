@@ -17,7 +17,9 @@ resolve_jar() {
 
   local packaged_jar="${SCRIPT_DIR}/spark-sdp-1.0.jar"
   local build_jar="${PROJECT_HOME}/spark-core/target/spark-sdp-1.0.jar"
-  if [[ -f "${packaged_jar}" ]]; then
+  if [[ -f "${packaged_jar}" && -f "${build_jar}" && "${build_jar}" -nt "${packaged_jar}" ]]; then
+    printf '%s\n' "${build_jar}"
+  elif [[ -f "${packaged_jar}" ]]; then
     printf '%s\n' "${packaged_jar}"
   elif [[ -f "${build_jar}" ]]; then
     printf '%s\n' "${build_jar}"

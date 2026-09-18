@@ -5,6 +5,7 @@ import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Reader;
 import java.net.URISyntaxException;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -16,6 +17,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 /**
  * Submission entrypoint (entrypoint A). It reads a job directory and starts entrypoint B through
@@ -59,11 +61,14 @@ public final class SparkSubmitStarter {
     Path specPath = resolveSpec(options.specPath);
     Path jobDirectory = specPath.getParent();
     Map<String, String> configuration = loadConfiguration(specPath);
+    Map<String, String> commonSparkConfiguration =
+      loadCommonSparkConfiguration(options.confPath);
     Path jobArchive = createJobArchive(jobDirectory);
 
     List<String> command = new ArrayList<>();
     command.add(resolveSparkSubmit());
-    appendSubmitOptions(command, configuration);
+    appendSubmitOptions(
+      command, configuration, commonSparkConfiguration, options.files, options.jars);
     command.add("--archives");
     command.add(jobArchive + "#" + DISTRIBUTED_JOB_DIRECTORY);
     command.add("--class");
@@ -75,7 +80,12 @@ public final class SparkSubmitStarter {
     return Collections.unmodifiableList(command);
   }
 
-  private static void appendSubmitOptions(List<String> command, Map<String, String> config) {
+  private static void appendSubmitOptions(
+      List<String> command,
+      Map<String, String> config,
+      Map<String, String> externalSparkConfiguration,
+      String files,
+      String jars) {
     append(command, "--master", value(config, "master", null, "yarn"));
     append(command, "--deploy-mode", value(config, "deploy-mode", "deployMode", "cluster"));
     // Keep the Yarn application name identical to the pipeline name declared in the job YAML.
@@ -89,18 +99,31 @@ public final class SparkSubmitStarter {
     if (executorNumber != null) {
       append(command, "--num-executors", executorNumber);
     }
-    appendKnown(command, config, "files", "--files");
-    appendKnown(command, config, "jars", "--jars");
+    if (files == null) {
+      appendKnown(command, config, "files", "--files");
+    } else {
+      append(command, "--files", files);
+    }
+    if (jars == null) {
+      appendKnown(command, config, "jars", "--jars");
+    } else {
+      append(command, "--jars", jars);
+    }
     appendKnown(command, config, "principal", "--principal");
     appendKnown(command, config, "keytab", "--keytab");
+    // The external properties file supplies defaults; job YAML has the final say.
+    LinkedHashMap<String, String> sparkConfiguration =
+      new LinkedHashMap<>(externalSparkConfiguration);
     for (Map.Entry<String, String> entry : config.entrySet()) {
       String key = entry.getKey();
       if (key.startsWith("conf.")) {
-        append(command, "--conf", key.substring("conf.".length()) + "=" + entry.getValue());
+        sparkConfiguration.put(key.substring("conf.".length()), entry.getValue());
       } else if (key.startsWith("spark.")) {
-        append(command, "--conf", key + "=" + entry.getValue());
+        sparkConfiguration.put(key, entry.getValue());
       }
     }
+    sparkConfiguration.forEach((key, configured) ->
+      append(command, "--conf", key + "=" + configured));
   }
 
   private static void appendKnown(
@@ -168,6 +191,33 @@ public final class SparkSubmitStarter {
     } catch (IOException e) {
       throw new SqlPipelineProjectException("Failed to read job spec: " + specPath, e);
     }
+  }
+
+  private static Map<String, String> loadCommonSparkConfiguration(Path requestedPath) {
+    if (requestedPath == null) {
+      return Collections.emptyMap();
+    }
+    Path path = requestedPath.toAbsolutePath().normalize();
+    if (!Files.isRegularFile(path)) {
+      throw new IllegalArgumentException("Spark properties file does not exist: " + path);
+    }
+
+    Properties properties = new Properties();
+    try (Reader reader = Files.newBufferedReader(path, java.nio.charset.StandardCharsets.UTF_8)) {
+      properties.load(reader);
+    } catch (IOException e) {
+      throw new IllegalArgumentException("Failed to read Spark properties file: " + path, e);
+    }
+
+    LinkedHashMap<String, String> result = new LinkedHashMap<>();
+    properties.stringPropertyNames().stream().sorted().forEach(key -> {
+      String normalizedKey = key.trim();
+      if (normalizedKey.isEmpty()) {
+        throw new IllegalArgumentException("Spark properties file contains an empty key: " + path);
+      }
+      result.put(normalizedKey, properties.getProperty(key));
+    });
+    return result;
   }
 
   private static Path createJobArchive(Path jobDirectory) {
@@ -253,28 +303,75 @@ public final class SparkSubmitStarter {
   private static void printUsage() {
     System.out.println("Usage:");
     System.out.println("  java -cp spark-sdp-1.0.jar " + SparkSubmitStarter.class.getName()
-      + " --spec <job-directory-or-spec-file>");
+      + " --spec <job-directory-or-spec-file> [--conf <spark-properties-file>]"
+      + " [--files <file1,file2,...>]"
+      + " [--jars <jar1,jar2,...>]");
     System.out.println();
     System.out.println("SPARK_HOME must point to the Spark installation. Defaults: master=yarn, deploy-mode=cluster.");
   }
 
   static final class StarterOptions {
     private final Path specPath;
+    private final Path confPath;
+    private final String files;
+    private final String jars;
     private final boolean help;
 
-    private StarterOptions(Path specPath, boolean help) {
+    private StarterOptions(
+        Path specPath, Path confPath, String files, String jars, boolean help) {
       this.specPath = specPath;
+      this.confPath = confPath;
+      this.files = files;
+      this.jars = jars;
       this.help = help;
     }
 
     static StarterOptions parse(String[] args) {
       if (args.length == 1 && ("--help".equals(args[0]) || "-h".equals(args[0]))) {
-        return new StarterOptions(null, true);
+        return new StarterOptions(null, null, null, null, true);
       }
-      if (args.length != 2 || !"--spec".equals(args[0])) {
-        throw new IllegalArgumentException("Expected --spec <job-directory-or-spec-file>.");
+      Path specPath = null;
+      Path confPath = null;
+      String files = null;
+      String jars = null;
+      for (int index = 0; index < args.length; index += 2) {
+        if (index + 1 >= args.length) {
+          throw new IllegalArgumentException("Missing value for option: " + args[index]);
+        }
+        if ("--spec".equals(args[index])) {
+          if (specPath != null) {
+            throw new IllegalArgumentException("Option --spec may only be specified once.");
+          }
+          specPath = Paths.get(args[index + 1]);
+        } else if ("--conf".equals(args[index])) {
+          if (confPath != null) {
+            throw new IllegalArgumentException("Option --conf may only be specified once.");
+          }
+          confPath = Paths.get(args[index + 1]);
+        } else if ("--files".equals(args[index])) {
+          if (files != null) {
+            throw new IllegalArgumentException("Option --files may only be specified once.");
+          }
+          files = args[index + 1].trim();
+          if (files.isEmpty()) {
+            throw new IllegalArgumentException("Option --files must not be empty.");
+          }
+        } else if ("--jars".equals(args[index])) {
+          if (jars != null) {
+            throw new IllegalArgumentException("Option --jars may only be specified once.");
+          }
+          jars = args[index + 1].trim();
+          if (jars.isEmpty()) {
+            throw new IllegalArgumentException("Option --jars must not be empty.");
+          }
+        } else {
+          throw new IllegalArgumentException("Unknown option: " + args[index]);
+        }
       }
-      return new StarterOptions(Paths.get(args[1]), false);
+      if (specPath == null) {
+        throw new IllegalArgumentException("Required option is missing: --spec");
+      }
+      return new StarterOptions(specPath, confPath, files, jars, false);
     }
   }
 

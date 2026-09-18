@@ -144,6 +144,32 @@ bin/spark-sdp.sh \
   --spec examples/sql-batch-pipeline
 ```
 
+可以通过 `--conf` 指定 UTF-8 properties 文件。文件中的每个配置都会转换为一个
+`spark-submit --conf key=value` 参数；如果存在同名配置，`spark-pipeline.yaml` 中的值会覆盖
+properties 文件中的值：
+
+```bash
+bin/spark-sdp.sh \
+  --spec examples/sql-batch-pipeline \
+  --conf /path/to/spark.properties
+```
+
+```properties
+spark.sql.catalog=mysql
+spark.sql.catalog.mysql=com.example.MysqlCatalog
+spark.sql.catalog.mysql.url=jdbc:mysql://localhost:3306/example
+```
+
+额外依赖 jar 可以通过 `--jars` 传给 `spark-submit`。多个 jar 必须在同一个参数中使用逗号
+分隔；命令行中的 `--jars` 会覆盖 `spark-pipeline.yaml` 的 `spark-submit.jars`：
+
+```bash
+bin/spark-sdp.sh \
+  --spec examples/sql-batch-pipeline \
+  --conf /path/to/spark.properties \
+  --jars /opt/spark/jars/mysql-connector.jar,/opt/spark/jars/custom-catalog.jar
+```
+
 提交到 Yarn `cluster` 模式并通过 Hive metastore 读写 Hive 表时，建议把 `hive-site.xml`
 通过 Spark 参数一起带上：
 

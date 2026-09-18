@@ -1,0 +1,13 @@
+name: sql_orders_pipeline
+libraries:
+  - transformations
+configuration:
+  spark.sql.shuffle.partitions: "1"
+spark-submit:
+  master: yarn
+  deploy-mode: cluster
+  queue: default
+  driver.memory: 1g
+  executor.memory: 1g
+  executor.cores: "1"
+  executor.num: "1"
