@@ -175,9 +175,13 @@ bin/spark-sdp.sh \
 
 ```bash
 export SPARK_HOME=/path/to/your/spark
+export SPARK_HIVE_CONF=/path/to/hive/conf
 
-bin/spark-sdp.sh --spec examples/sql-hive-insert-pipeline
+sh examples/run_sql_hive_pipeline_on_yarn.sh
 ```
+
+`SPARK_HIVE_CONF` 可以指向 `hive-site.xml` 本身，也可以指向包含该文件的目录；脚本会自动
+将其通过 `spark-submit --files` 分发给 Yarn cluster driver。
 
 执行前先打包，并把产物复制到 `bin/` 目录，与脚本同级：
 

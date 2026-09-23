@@ -1,5 +1,5 @@
 name: sql_hive_insert_pipeline
-database: dwd_demo
+database: spark_test
 configuration:
   spark.sql.shuffle.partitions: "8"
 libraries:

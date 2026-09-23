@@ -282,9 +282,11 @@ bin/spark-sdp.sh \
 如果提交到 Yarn `cluster` 模式，并且你的 Hive 配置依赖 `hive-site.xml`，可以这样：
 
 ```bash
-bin/spark-sdp.sh \
-  --spec examples/sql-hive-insert-pipeline
+export SPARK_HIVE_CONF=/path/to/hive/conf
+sh examples/run_sql_hive_pipeline_on_yarn.sh
 ```
+
+`SPARK_HIVE_CONF` 可以是 `hive-site.xml` 文件路径，也可以是包含该文件的目录。
 
 如果你想先看帮助信息：
 

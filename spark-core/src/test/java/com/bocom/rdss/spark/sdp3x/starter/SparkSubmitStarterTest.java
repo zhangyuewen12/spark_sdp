@@ -17,6 +17,13 @@ class SparkSubmitStarterTest {
   Path tempDir;
 
   @Test
+  void shouldReturnSuccessForHelpAndFailureForInvalidArguments() {
+    assertEquals(0, SparkSubmitStarter.run(new String[] {"--help"}));
+    assertEquals(2, SparkSubmitStarter.run(new String[] {"--spec"}));
+    assertEquals(2, SparkSubmitStarter.run(new String[] {"--unknown", "value"}));
+  }
+
+  @Test
   void shouldBuildYarnClusterSubmitCommandFromJobDirectory() throws Exception {
     Path jobDirectory = Files.createDirectories(tempDir.resolve("daily-job"));
     Files.createDirectories(jobDirectory.resolve("transformations"));

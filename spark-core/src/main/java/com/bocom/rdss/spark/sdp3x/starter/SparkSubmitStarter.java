@@ -32,23 +32,32 @@ public final class SparkSubmitStarter {
   }
 
   public static void main(String[] args) {
+    int exitCode = run(args);
+    if (exitCode != 0) {
+      System.exit(exitCode);
+    }
+  }
+
+  static int run(String[] args) {
     StarterOptions options;
     try {
       options = StarterOptions.parse(args);
       if (options.help) {
         printUsage();
-        return;
+        return 0;
       }
       List<String> command = buildCommand(options, locateApplicationJar());
       System.out.println("Executing: " + printable(command));
       Process process = new ProcessBuilder(command).inheritIO().start();
       int exitCode = process.waitFor();
       if (exitCode != 0) {
-        throw new IllegalStateException("spark-submit exited with code " + exitCode);
+        System.err.println("spark-submit exited with code " + exitCode);
       }
+      return exitCode;
     } catch (IllegalArgumentException e) {
       System.err.println(e.getMessage());
       printUsage();
+      return 2;
     } catch (IOException e) {
       throw new IllegalStateException("Failed to start spark-submit.", e);
     } catch (InterruptedException e) {
