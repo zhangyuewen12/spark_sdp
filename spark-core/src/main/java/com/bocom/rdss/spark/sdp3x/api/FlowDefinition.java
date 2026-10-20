@@ -17,7 +17,6 @@
 
 package com.bocom.rdss.spark.sdp3x.api;
 
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -40,14 +39,6 @@ public interface FlowDefinition {
   /** Returns the explicit upstream dataset names that this flow depends on. */
   Set<String> inputDatasets();
 
-  /** Returns the per-flow Spark SQL configuration overrides. */
-  Map<String, String> sparkConf();
-
   /** Returns the query callback that creates the batch output for the flow. */
   FlowQuery query();
-
-  /** Returns whether the flow should be treated as a normal recurring batch refresh. */
-  default boolean isBatch() {
-    return mode() == FlowMode.BATCH;
-  }
 }

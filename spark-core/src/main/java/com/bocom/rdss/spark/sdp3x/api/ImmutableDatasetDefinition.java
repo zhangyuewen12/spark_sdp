@@ -31,7 +31,6 @@ import java.util.Optional;
 public final class ImmutableDatasetDefinition implements DatasetDefinition {
   private final String name;
   private final DatasetKind kind;
-  private final String comment;
   private final String format;
   private final StructType schema;
   private final Map<String, String> properties;
@@ -42,13 +41,11 @@ public final class ImmutableDatasetDefinition implements DatasetDefinition {
   private ImmutableDatasetDefinition(
       String name,
       DatasetKind kind,
-      String comment,
       String format,
       StructType schema,
       Map<String, String> properties) {
     this.name = Objects.requireNonNull(name, "name");
     this.kind = Objects.requireNonNull(kind, "kind");
-    this.comment = comment;
     this.format = format;
     this.schema = schema;
     this.properties = Collections.unmodifiableMap(new LinkedHashMap<>(properties));
@@ -58,7 +55,7 @@ public final class ImmutableDatasetDefinition implements DatasetDefinition {
    * Creates a persisted table dataset definition.
    */
   public static ImmutableDatasetDefinition table(String name) {
-    return new ImmutableDatasetDefinition(name, DatasetKind.TABLE, null, null, null,
+    return new ImmutableDatasetDefinition(name, DatasetKind.TABLE, null, null,
       Collections.<String, String>emptyMap());
   }
 
@@ -66,7 +63,7 @@ public final class ImmutableDatasetDefinition implements DatasetDefinition {
    * Creates a materialized view dataset definition.
    */
   public static ImmutableDatasetDefinition materializedView(String name) {
-    return new ImmutableDatasetDefinition(name, DatasetKind.MATERIALIZED_VIEW, null, null, null,
+    return new ImmutableDatasetDefinition(name, DatasetKind.MATERIALIZED_VIEW, null, null,
       Collections.<String, String>emptyMap());
   }
 
@@ -74,30 +71,25 @@ public final class ImmutableDatasetDefinition implements DatasetDefinition {
    * Creates a temporary view dataset definition.
    */
   public static ImmutableDatasetDefinition temporaryView(String name) {
-    return new ImmutableDatasetDefinition(name, DatasetKind.TEMPORARY_VIEW, null, null, null,
+    return new ImmutableDatasetDefinition(name, DatasetKind.TEMPORARY_VIEW, null, null,
       Collections.<String, String>emptyMap());
-  }
-
-  /** Returns a copy with a new comment value. */
-  public ImmutableDatasetDefinition withComment(String newComment) {
-    return new ImmutableDatasetDefinition(name, kind, newComment, format, schema, properties);
   }
 
   /** Returns a copy with a new storage format value. */
   public ImmutableDatasetDefinition withFormat(String newFormat) {
-    return new ImmutableDatasetDefinition(name, kind, comment, newFormat, schema, properties);
+    return new ImmutableDatasetDefinition(name, kind, newFormat, schema, properties);
   }
 
   /** Returns a copy with a new declared schema. */
   public ImmutableDatasetDefinition withSchema(StructType newSchema) {
-    return new ImmutableDatasetDefinition(name, kind, comment, format, newSchema, properties);
+    return new ImmutableDatasetDefinition(name, kind, format, newSchema, properties);
   }
 
   /** Returns a copy with one additional dataset property. */
   public ImmutableDatasetDefinition withProperty(String key, String value) {
     LinkedHashMap<String, String> updated = new LinkedHashMap<>(properties);
     updated.put(key, value);
-    return new ImmutableDatasetDefinition(name, kind, comment, format, schema, updated);
+    return new ImmutableDatasetDefinition(name, kind, format, schema, updated);
   }
 
   /** {@inheritDoc} */
@@ -110,12 +102,6 @@ public final class ImmutableDatasetDefinition implements DatasetDefinition {
   @Override
   public DatasetKind kind() {
     return kind;
-  }
-
-  /** {@inheritDoc} */
-  @Override
-  public Optional<String> comment() {
-    return Optional.ofNullable(comment);
   }
 
   /** {@inheritDoc} */

@@ -84,8 +84,7 @@ public final class DefaultDependencyAnalyzer implements DependencyAnalyzer {
       pipelineDefinition,
       flowsByName,
       upstreamFlowsByFlow,
-      downstreamFlowsByFlow,
-      producersByDataset);
+      downstreamFlowsByFlow);
   }
 
   /**

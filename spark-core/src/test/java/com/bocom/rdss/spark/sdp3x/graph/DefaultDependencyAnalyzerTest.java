@@ -44,15 +44,12 @@ class DefaultDependencyAnalyzerTest {
     DependencyGraph graph = analyzer.analyze(pipeline);
 
     assertEquals(3, graph.flows().size());
-    assertEquals(Collections.singletonList("seed_orders"), graph.producers("orders_source"));
     assertEquals(Collections.singleton("clean_orders"), graph.upstreamFlows("daily_orders"));
     assertEquals(Collections.singleton("daily_orders"), graph.downstreamFlows("clean_orders"));
     assertTrue(graph.flow("seed_orders").isPresent());
     assertFalse(graph.flow("missing").isPresent());
     assertTrue(graph.upstreamFlows("missing").isEmpty());
     assertTrue(graph.downstreamFlows("missing").isEmpty());
-    assertTrue(graph.producers("missing").isEmpty());
-    assertThrows(UnsupportedOperationException.class, () -> graph.producers("orders_source").add("x"));
   }
 
   @Test
@@ -169,9 +166,7 @@ class DefaultDependencyAnalyzerTest {
     LinkedHashMap<String, com.bocom.rdss.spark.sdp3x.api.FlowDefinition> flows = new LinkedHashMap<>();
     LinkedHashMap<String, java.util.Set<String>> upstream = new LinkedHashMap<>();
     LinkedHashMap<String, java.util.Set<String>> downstream = new LinkedHashMap<>();
-    LinkedHashMap<String, java.util.List<String>> producers = new LinkedHashMap<>();
-
-    DependencyGraph graph = new DependencyGraph(pipeline, flows, upstream, downstream, producers);
+    DependencyGraph graph = new DependencyGraph(pipeline, flows, upstream, downstream);
 
     flows.put("flow", ImmutableFlowDefinition.batchFlow(
       "flow",
@@ -180,10 +175,7 @@ class DefaultDependencyAnalyzerTest {
       runtime -> mock(Dataset.class)));
     upstream.put("flow", new LinkedHashSet<>(Arrays.asList("a", "b")));
     downstream.put("flow", new LinkedHashSet<>(Collections.singletonList("x")));
-    producers.put("dataset", Collections.singletonList("flow"));
-
     assertTrue(graph.flows().isEmpty());
-    assertTrue(graph.producers("dataset").isEmpty());
   }
 
   @Test

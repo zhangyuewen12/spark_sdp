@@ -38,7 +38,6 @@ public final class DependencyGraph {
   private final Map<String, FlowDefinition> flowsByName;
   private final Map<String, Set<String>> upstreamFlowsByFlow;
   private final Map<String, Set<String>> downstreamFlowsByFlow;
-  private final Map<String, List<String>> producersByDataset;
 
   /**
    * Creates an immutable dependency graph snapshot.
@@ -47,8 +46,7 @@ public final class DependencyGraph {
       PipelineDefinition pipeline,
       Map<String, FlowDefinition> flowsByName,
       Map<String, Set<String>> upstreamFlowsByFlow,
-      Map<String, Set<String>> downstreamFlowsByFlow,
-      Map<String, List<String>> producersByDataset) {
+      Map<String, Set<String>> downstreamFlowsByFlow) {
     this.pipeline = Objects.requireNonNull(pipeline, "pipeline");
     this.flowsByName = Collections.unmodifiableMap(new LinkedHashMap<>(flowsByName));
     LinkedHashMap<String, Set<String>> copiedUpstream = new LinkedHashMap<>();
@@ -59,10 +57,6 @@ public final class DependencyGraph {
     downstreamFlowsByFlow.forEach((key, value) ->
       copiedDownstream.put(key, Collections.unmodifiableSet(new LinkedHashSet<>(value))));
     this.downstreamFlowsByFlow = Collections.unmodifiableMap(copiedDownstream);
-    LinkedHashMap<String, List<String>> copiedProducers = new LinkedHashMap<>();
-    producersByDataset.forEach((key, value) ->
-      copiedProducers.put(key, Collections.unmodifiableList(new ArrayList<>(value))));
-    this.producersByDataset = Collections.unmodifiableMap(copiedProducers);
   }
 
   /** Returns the pipeline definition from which this graph was derived. */
@@ -88,10 +82,5 @@ public final class DependencyGraph {
   /** Returns the downstream flow names that depend on the target flow. */
   public Set<String> downstreamFlows(String flowName) {
     return downstreamFlowsByFlow.getOrDefault(flowName, Collections.<String>emptySet());
-  }
-
-  /** Returns the flow names that produce the given dataset. */
-  public List<String> producers(String datasetName) {
-    return producersByDataset.getOrDefault(datasetName, Collections.<String>emptyList());
   }
 }

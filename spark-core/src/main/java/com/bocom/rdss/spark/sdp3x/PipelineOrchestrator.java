@@ -82,12 +82,12 @@ public final class PipelineOrchestrator {
 
   /** Plans flows in declaration order, retaining dependency analysis for validation. */
   public ExecutionPlan planInDeclarationOrder(PipelineDefinition pipelineDefinition) {
-    DependencyGraph graph = dependencyAnalyzer.analyze(pipelineDefinition);
+    dependencyAnalyzer.analyze(pipelineDefinition);
     List<ExecutionStage> stages = new ArrayList<>();
     int index = 0;
     for (com.bocom.rdss.spark.sdp3x.api.FlowDefinition flow : pipelineDefinition.flows()) {
       stages.add(new ExecutionStage(index++, java.util.Collections.singletonList(flow)));
     }
-    return new ExecutionPlan(pipelineDefinition, graph, stages);
+    return new ExecutionPlan(pipelineDefinition, stages);
   }
 }

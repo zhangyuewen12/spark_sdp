@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.function.Supplier;
 
 /**
  * Submission entrypoint (entrypoint A). It packages a job directory or a spec plus one task file,
@@ -40,6 +41,16 @@ public final class SparkSubmitStarter {
   }
 
   static int run(String[] args) {
+    return run(args, SparkSubmitStarter::locateApplicationJar,
+      command -> new ProcessBuilder(command).inheritIO().start());
+  }
+
+  @FunctionalInterface
+  interface ProcessLauncher {
+    Process start(List<String> command) throws IOException;
+  }
+
+  static int run(String[] args, Supplier<Path> applicationJar, ProcessLauncher launcher) {
     StarterOptions options;
     try {
       options = StarterOptions.parse(args);
@@ -47,9 +58,9 @@ public final class SparkSubmitStarter {
         printUsage();
         return 0;
       }
-      List<String> command = buildCommand(options, locateApplicationJar());
+      List<String> command = buildCommand(options, applicationJar.get());
       System.out.println("Executing: " + printable(command));
-      Process process = new ProcessBuilder(command).inheritIO().start();
+      Process process = launcher.start(command);
       int exitCode = process.waitFor();
       if (exitCode != 0) {
         System.err.println("spark-submit exited with code " + exitCode);

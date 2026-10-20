@@ -75,6 +75,6 @@ public final class TopologicalPipelinePlanner implements PipelinePlanner {
     if (visited != indegree.size()) {
       throw new PipelineValidationException("Unable to build a complete execution plan");
     }
-    return new ExecutionPlan(dependencyGraph.pipeline(), dependencyGraph, stages);
+    return new ExecutionPlan(dependencyGraph.pipeline(), stages);
   }
 }

@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -118,5 +120,54 @@ class SqlPipelineProjectSpecLoaderTest {
       "transformation: absent\n".getBytes(StandardCharsets.UTF_8));
     assertTrue(assertThrows(SqlPipelineProjectException.class, () -> loader.load(missingDirectory))
       .getMessage().contains("does not exist"));
+  }
+
+  @Test
+  void shouldLoadOneSqlTaskFileWithoutTransformationDirectory() throws IOException {
+    Path spec = write("spark-pipeline.yaml", "job-type: spark-sql\nname: selected\n");
+    Path sql = write("selected.sql", "SELECT 1;\n");
+    SqlPipelineProjectSpec loaded = loader.load(spec, sql);
+    assertEquals(Collections.singletonList(sql.toAbsolutePath().normalize()), loaded.sqlFiles());
+    assertTrue(loaded.sqlDirectories().isEmpty());
+    assertThrows(SqlPipelineProjectException.class,
+      () -> loader.load(spec, write("wrong.list", "SELECT 1")));
+    assertThrows(SqlPipelineProjectException.class,
+      () -> loader.load(spec, tempDir.resolve("missing.sql")));
+  }
+
+  @Test
+  void shouldReadDistinctCompactionTablesAndValidateList() throws IOException {
+    Path spec = write("spark-pipeline.yaml", "job-type: hudi-compaction\nname: compact\n");
+    Path list = write("tables.list", "\uFEFF# comment\n db_a.table_a \n\ndb_a.table_a\ndb_b.table_b\n");
+    SqlPipelineProjectSpec loaded = loader.load(spec, list);
+    assertEquals(Arrays.asList("db_a.table_a", "db_b.table_b"), loaded.compactionTables());
+    assertTrue(loaded.sqlFiles().isEmpty());
+    assertThrows(SqlPipelineProjectException.class, () -> loader.load(spec));
+    assertThrows(SqlPipelineProjectException.class,
+      () -> loader.load(spec, write("tables.txt", "db_a.table_a\n")));
+    assertThrows(SqlPipelineProjectException.class,
+      () -> loader.load(spec, write("invalid.list", "db_a.table_a\nbad-name\n")));
+    assertThrows(SqlPipelineProjectException.class,
+      () -> loader.load(spec, write("empty.list", "# only comment\n")));
+  }
+
+  @Test
+  void shouldRejectUnsupportedJobTypeAndAcceptAbsoluteTransformationPath() throws IOException {
+    Path spec = write("spark-pipeline.yaml", "job-type: unknown\n");
+    assertThrows(SqlPipelineProjectException.class, () -> loader.load(spec));
+    Files.write(spec, "\n".getBytes(StandardCharsets.UTF_8));
+    Files.createDirectories(tempDir.resolve("transformations"));
+    assertEquals(1, loader.load(spec).sqlDirectories().size());
+    Files.write(spec, ("transformation: " + tempDir.resolve("transformations") + "\n")
+      .getBytes(StandardCharsets.UTF_8));
+    assertEquals(tempDir.resolve("transformations"), loader.load(spec).sqlDirectories().get(0));
+    Files.write(spec, "transformation: '  '\n".getBytes(StandardCharsets.UTF_8));
+    assertThrows(SqlPipelineProjectException.class, () -> loader.load(spec));
+  }
+
+  private Path write(String name, String content) throws IOException {
+    Path path = tempDir.resolve(name);
+    Files.write(path, content.getBytes(StandardCharsets.UTF_8));
+    return path;
   }
 }

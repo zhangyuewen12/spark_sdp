@@ -33,9 +33,6 @@ public interface DatasetDefinition {
   /** Returns the logical kind that tells the executor how to publish the dataset. */
   DatasetKind kind();
 
-  /** Returns an optional user-facing description of the dataset. */
-  Optional<String> comment();
-
   /** Returns an optional storage format hint used when persisting the dataset. */
   Optional<String> format();
 
@@ -44,9 +41,4 @@ public interface DatasetDefinition {
 
   /** Returns dataset properties that can be used by validation or execution policies. */
   Map<String, String> properties();
-
-  /** Returns whether the dataset should be persisted beyond the current Spark session. */
-  default boolean materialized() {
-    return kind() != DatasetKind.TEMPORARY_VIEW;
-  }
 }

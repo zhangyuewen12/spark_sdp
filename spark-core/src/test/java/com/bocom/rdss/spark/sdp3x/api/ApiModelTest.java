@@ -21,37 +21,27 @@ class ApiModelTest {
     StructType schema = new StructType().add("id", DataTypes.LongType, false);
 
     ImmutableDatasetDefinition dataset = ImmutableDatasetDefinition.table("orders")
-      .withComment("orders table")
       .withFormat("parquet")
       .withSchema(schema)
       .withProperty("quality", "gold");
 
     assertEquals("orders", dataset.name());
     assertEquals(DatasetKind.TABLE, dataset.kind());
-    assertEquals(Optional.of("orders table"), dataset.comment());
     assertEquals(Optional.of("parquet"), dataset.format());
     assertEquals(Optional.of(schema), dataset.schema());
     assertEquals("gold", dataset.properties().get("quality"));
-    assertTrue(dataset.materialized());
     assertThrows(UnsupportedOperationException.class, () -> dataset.properties().put("x", "y"));
   }
 
   @Test
-  void immutableDatasetDefinitionShouldRecognizeTemporaryViewsAsNonMaterialized() {
-    DatasetDefinition dataset = ImmutableDatasetDefinition.temporaryView("tmp_orders");
-
-    assertFalse(dataset.materialized());
-  }
-
-  @Test
-  void immutableFlowDefinitionShouldExposeSettingsAndDefaultBatchFlag() {
+  void immutableFlowDefinitionShouldExposeFieldsAndDefaultBatchFlag() {
     FlowQuery query = runtime -> mock(Dataset.class);
 
     ImmutableFlowDefinition batchFlow = ImmutableFlowDefinition.batchFlow(
       "clean_orders",
       "orders_clean",
       Collections.singleton("orders_source"),
-      query).withSparkConf("spark.sql.shuffle.partitions", "1");
+      query);
 
     ImmutableFlowDefinition onceFlow = ImmutableFlowDefinition.onceFlow(
       "seed_orders",
@@ -62,14 +52,10 @@ class ApiModelTest {
     assertEquals("clean_orders", batchFlow.name());
     assertEquals("orders_clean", batchFlow.targetDataset());
     assertEquals(FlowMode.BATCH, batchFlow.mode());
-    assertTrue(batchFlow.isBatch());
     assertEquals(Collections.singleton("orders_source"), batchFlow.inputDatasets());
-    assertEquals("1", batchFlow.sparkConf().get("spark.sql.shuffle.partitions"));
     assertSame(query, batchFlow.query());
 
     assertEquals(FlowMode.ONCE, onceFlow.mode());
-    assertFalse(onceFlow.isBatch());
-    assertThrows(UnsupportedOperationException.class, () -> batchFlow.sparkConf().put("x", "y"));
   }
 
   @Test

@@ -55,47 +55,8 @@ public final class SqlPipelineRunApplication {
 
     try {
       if (jobSpec.jobType() == JobType.HUDI_COMPACTION) {
-        List<String> failedTables = new ArrayList<>();
-        for (String table : jobSpec.compactionTables()) {
-          try {
-            String qualifiedTable = SqlIdentifierUtils.quoteQualifiedTable(table);
-            List<org.apache.spark.sql.Row> plans = sparkSession.sql(
-                "SHOW COMPACTION ON " + qualifiedTable).collectAsList();
-            if (plans.stream().anyMatch(row -> "INFLIGHT".equalsIgnoreCase(row.getString(2)))) {
-              LOG.warn("Skipping {}: inflight compaction exists", table);
-              continue;
-            }
-            org.apache.spark.sql.Row requested = plans.stream()
-                .filter(row -> "REQUESTED".equalsIgnoreCase(row.getString(2)))
-                .min(Comparator.comparing(row -> row.getString(0))).orElse(null);
-            if (requested == null) {
-              LOG.info("Skipping {}: no requested compaction plan", table);
-              continue;
-            }
-            String instant = requested.getString(0);
-            if (!instant.matches("[1-9][0-9]{13,16}")) {
-              throw new IllegalArgumentException("Invalid compaction instant: " + instant);
-            }
-            String sql = "RUN COMPACTION ON " + qualifiedTable + " AT " + instant;
-            LOG.info("Executing {}", sql);
-            sparkSession.sql(sql).collectAsList();
-            boolean completed = sparkSession.sql("SHOW COMPACTION ON " + qualifiedTable)
-                .collectAsList().stream().anyMatch(row -> instant.equals(row.getString(0))
-                    && "COMPLETED".equalsIgnoreCase(row.getString(2)));
-            if (!completed) {
-              throw new IllegalStateException("Compaction SQL returned without a completed instant: "
-                  + table + " at " + instant);
-            }
-            LOG.info("Completed compaction: {} at {}", table, instant);
-          } catch (Exception e) {
-            failedTables.add(table);
-            LOG.error("Compaction failed for {}", table, e);
-          }
-        }
-        if (!failedTables.isEmpty()) {
-          throw new IllegalStateException("Compaction failed for " + failedTables.size()
-              + " table(s): " + String.join(", ", failedTables));
-        }
+        jobSpec.configuration().forEach((key, value) -> sparkSession.conf().set(key, value));
+        executeCompactionTables(sparkSession, jobSpec.compactionTables());
       } else {
         if (sparkSessionContext.localWarehouseDirectory() != null) {
           resetLocalManagedDatasets(
@@ -112,6 +73,50 @@ public final class SqlPipelineRunApplication {
       }
     } finally {
       sparkSession.stop();
+    }
+  }
+
+  static void executeCompactionTables(SparkSession sparkSession, List<String> tables) {
+    List<String> failedTables = new ArrayList<>();
+    for (String table : tables) {
+      try {
+        String qualifiedTable = SqlIdentifierUtils.quoteQualifiedTable(table);
+        List<org.apache.spark.sql.Row> plans = sparkSession.sql(
+            "SHOW COMPACTION ON " + qualifiedTable).collectAsList();
+        if (plans.stream().anyMatch(row -> "INFLIGHT".equalsIgnoreCase(row.getString(2)))) {
+          LOG.warn("Skipping {}: inflight compaction exists", table);
+          continue;
+        }
+        org.apache.spark.sql.Row requested = plans.stream()
+            .filter(row -> "REQUESTED".equalsIgnoreCase(row.getString(2)))
+            .min(Comparator.comparing(row -> row.getString(0))).orElse(null);
+        if (requested == null) {
+          LOG.info("Skipping {}: no requested compaction plan", table);
+          continue;
+        }
+        String instant = requested.getString(0);
+        if (!instant.matches("[1-9][0-9]{13,16}")) {
+          throw new IllegalArgumentException("Invalid compaction instant: " + instant);
+        }
+        String sql = "RUN COMPACTION ON " + qualifiedTable + " AT " + instant;
+        LOG.info("Executing {}", sql);
+        sparkSession.sql(sql).collectAsList();
+        boolean completed = sparkSession.sql("SHOW COMPACTION ON " + qualifiedTable)
+            .collectAsList().stream().anyMatch(row -> instant.equals(row.getString(0))
+                && "COMPLETED".equalsIgnoreCase(row.getString(2)));
+        if (!completed) {
+          throw new IllegalStateException("Compaction SQL returned without a completed instant: "
+              + table + " at " + instant);
+        }
+        LOG.info("Completed compaction: {} at {}", table, instant);
+      } catch (Exception e) {
+        failedTables.add(table);
+        LOG.error("Compaction failed for {}", table, e);
+      }
+    }
+    if (!failedTables.isEmpty()) {
+      throw new IllegalStateException("Compaction failed for " + failedTables.size()
+          + " table(s): " + String.join(", ", failedTables));
     }
   }
 
@@ -136,7 +141,7 @@ public final class SqlPipelineRunApplication {
     }
   }
 
-  private static SparkSessionContext createSparkSession(
+  static SparkSessionContext createSparkSession(
       SqlPipelineRunOptions cliOptions,
       String applicationName,
       JobType jobType) {
@@ -220,7 +225,7 @@ public final class SqlPipelineRunApplication {
     return localWarehouseDirectory;
   }
 
-  private static void applyHiveSiteProperties(
+  static void applyHiveSiteProperties(
       SparkSession.Builder sparkBuilder,
       Map<String, String> hiveSiteProperties) {
     hiveSiteProperties.forEach((key, value) -> {
@@ -275,7 +280,7 @@ public final class SqlPipelineRunApplication {
     }
   }
 
-  private static void resetLocalManagedDatasets(
+  static void resetLocalManagedDatasets(
       SparkSession sparkSession,
       PipelineDefinition pipelineDefinition,
       Path warehouseDirectory) {
@@ -303,7 +308,7 @@ public final class SqlPipelineRunApplication {
     return java.nio.file.Paths.get(parts[parts.length - 2] + ".db");
   }
 
-  private static void deleteIfExists(Path path) {
+  static void deleteIfExists(Path path) {
     if (!Files.exists(path)) {
       return;
     }

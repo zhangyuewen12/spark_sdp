@@ -1,6 +1,7 @@
 package com.bocom.rdss.spark.sdp3x.sql;
 
 import com.bocom.rdss.spark.sdp3x.enums.ExecutionMode;
+import com.bocom.rdss.spark.sdp3x.enums.JobType;
 
 import com.bocom.rdss.spark.sdp3x.api.ImmutableDatasetDefinition;
 import com.bocom.rdss.spark.sdp3x.api.ImmutableFlowDefinition;
@@ -46,7 +47,6 @@ class SqlPlanAndApplicationTest {
             Collections.<String>emptySet(),
             runtime -> null))
           .build(),
-        null,
         Collections.singletonList(new ExecutionStage(0, Collections.singletonList(
           ImmutableFlowDefinition.batchFlow("flow_a", "dataset_a", Collections.<String>emptySet(), runtime -> null))))));
     } catch (Exception e) {
@@ -104,10 +104,10 @@ class SqlPlanAndApplicationTest {
     try {
       System.setProperty(SqlPipelineRunApplication.LOCAL_DEV_HIVE_ENABLED_PROPERTY, "false");
       SqlPipelineRunApplication.run(SqlPipelineRunOptions.parse(new String[] {
-        "run", "--spec", explicitProject.resolve("spark-pipeline.yaml").toString(), "--master", "local[1]"
+        "--spec", explicitProject.resolve("spark-pipeline.yaml").toString(), "--master", "local[1]"
       }));
       SqlPipelineRunApplication.run(SqlPipelineRunOptions.parse(new String[] {
-        "run", "--spec", defaultProject.resolve("spark-pipeline.yaml").toString()
+        "--spec", defaultProject.resolve("spark-pipeline.yaml").toString()
       }));
     } finally {
       restoreProperty(SqlPipelineRunApplication.LOCAL_DEV_HIVE_ENABLED_PROPERTY, originalProperty);
@@ -167,8 +167,7 @@ class SqlPlanAndApplicationTest {
       Collections.singleton("source"),
       Paths.get("/tmp/project/sql/001.sql"),
       9,
-      ExecutionMode.SQL_STATEMENT,
-      Collections.singletonMap("spark.sql.shuffle.partitions", "2"));
+      ExecutionMode.SQL_STATEMENT);
     SqlPipelineProjectException exception = new SqlPipelineProjectException("bad", new RuntimeException("cause"));
 
     assertEquals(Paths.get("/tmp/project"), spec.rootDirectory());
@@ -181,11 +180,28 @@ class SqlPlanAndApplicationTest {
     assertEquals("SELECT 1", definition.querySql());
     assertEquals(9, definition.statementIndex());
     assertEquals(ExecutionMode.SQL_STATEMENT, definition.executionMode());
-    assertEquals("2", definition.sparkConf().get("spark.sql.shuffle.partitions"));
     assertEquals("bad", exception.getMessage());
     assertEquals("cause", exception.getCause().getMessage());
     assertEquals("sql.source.file", SqlPipelineDatasetProperties.SOURCE_FILE);
     assertEquals("sql_statement", SqlPipelineDatasetProperties.EXECUTION_MODE_SQL_STATEMENT);
+  }
+
+  @Test
+  void projectSpecShouldSelectTaskFileAndProtectCompactionTableList() throws Exception {
+    Path sql = Files.write(tempDir.resolve("one.sql"), "SELECT 1;".getBytes(StandardCharsets.UTF_8));
+    SqlPipelineProjectSpec selected = new SqlPipelineProjectSpec(
+      tempDir, "one", null, null, Collections.emptyMap(), Collections.singletonList(tempDir),
+      JobType.SPARK_SQL, Collections.emptyList(), sql);
+    assertEquals(Collections.singletonList(sql), selected.sqlFiles());
+    assertTrue(selected.sqlDirectories().isEmpty());
+
+    SqlPipelineProjectSpec compaction = new SqlPipelineProjectSpec(
+      tempDir, "compact", null, null, Collections.emptyMap(), Collections.emptyList(),
+      JobType.HUDI_COMPACTION, Collections.singletonList("db.table"));
+    assertEquals(JobType.HUDI_COMPACTION, compaction.jobType());
+    assertEquals(Collections.singletonList("db.table"), compaction.compactionTables());
+    assertThrows(UnsupportedOperationException.class,
+      () -> compaction.compactionTables().add("other.table"));
   }
 
   private Path exampleProject(String name) throws URISyntaxException {

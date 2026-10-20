@@ -63,8 +63,7 @@ public final class SqlPipelineProjectSpecLoader {
       readConfiguration(rawSpec.get("configuration")),
       sqlFileSource,
       jobType,
-      compactionTables,
-      normalizedTaskFile);
+      compactionTables);
   }
 
   private Path resolveSpecPath(Path projectRootOrSpecPath) {

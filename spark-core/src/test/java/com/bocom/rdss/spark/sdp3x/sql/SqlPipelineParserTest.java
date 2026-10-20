@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -59,11 +58,12 @@ class SqlPipelineParserTest {
   }
 
   @Test
-  void shouldApplySetStatementsToTheNextFlowOnly() throws IOException {
+  void shouldIgnoreSetStatementsWithoutChangingFollowingFlows() throws IOException {
     Path sqlFile = tempDir.resolve("flow-conf.sql");
     Files.write(sqlFile, (
       "SET spark.sql.shuffle.partitions=8;\n"
         + "SET spark.sql.autoBroadcastJoinThreshold = -1;\n"
+        + "SET -v;\n"
         + "CREATE TEMP VIEW stage_orders AS\n"
         + "SELECT * FROM raw.orders_source;\n"
         + "CREATE MATERIALIZED VIEW daily_orders AS\n"
@@ -72,21 +72,17 @@ class SqlPipelineParserTest {
     List<SqlPipelineDefinition> definitions = parser.parse(sqlFile, 1);
 
     assertEquals(2, definitions.size());
-    assertEquals("8", definitions.get(0).sparkConf().get("spark.sql.shuffle.partitions"));
-    assertEquals("-1", definitions.get(0).sparkConf().get("spark.sql.autoBroadcastJoinThreshold"));
-    assertEquals(Collections.emptyMap(), definitions.get(1).sparkConf());
+    assertEquals(1, definitions.get(0).statementIndex());
+    assertEquals(2, definitions.get(1).statementIndex());
+    assertEquals("stage_orders", definitions.get(0).datasetName());
   }
 
   @Test
-  void shouldRejectDanglingSetStatementsWithoutFollowingFlow() throws IOException {
+  void shouldIgnoreSetStatementsWithoutFollowingFlow() throws IOException {
     Path sqlFile = tempDir.resolve("dangling-set.sql");
     Files.write(sqlFile, "SET spark.sql.shuffle.partitions=8;".getBytes(StandardCharsets.UTF_8));
 
-    SqlPipelineProjectException exception = assertThrows(
-      SqlPipelineProjectException.class,
-      () -> parser.parse(sqlFile, 1));
-
-    assertTrue(exception.getMessage().contains("must be followed by a supported SQL flow statement"));
+    assertTrue(parser.parse(sqlFile, 1).isEmpty());
   }
 
   @Test

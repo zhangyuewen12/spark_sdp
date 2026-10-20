@@ -18,9 +18,7 @@
 package com.bocom.rdss.spark.sdp3x.api;
 
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -32,7 +30,6 @@ public final class ImmutableFlowDefinition implements com.bocom.rdss.spark.sdp3x
   private final String targetDataset;
   private final com.bocom.rdss.spark.sdp3x.api.FlowMode mode;
   private final Set<String> inputDatasets;
-  private final Map<String, String> sparkConf;
   private final com.bocom.rdss.spark.sdp3x.api.FlowQuery query;
 
   /**
@@ -43,13 +40,11 @@ public final class ImmutableFlowDefinition implements com.bocom.rdss.spark.sdp3x
       String targetDataset,
       com.bocom.rdss.spark.sdp3x.api.FlowMode mode,
       Set<String> inputDatasets,
-      Map<String, String> sparkConf,
       com.bocom.rdss.spark.sdp3x.api.FlowQuery query) {
     this.name = Objects.requireNonNull(name, "name");
     this.targetDataset = Objects.requireNonNull(targetDataset, "targetDataset");
     this.mode = Objects.requireNonNull(mode, "mode");
     this.inputDatasets = Collections.unmodifiableSet(new LinkedHashSet<>(inputDatasets));
-    this.sparkConf = Collections.unmodifiableMap(new LinkedHashMap<>(sparkConf));
     this.query = Objects.requireNonNull(query, "query");
   }
 
@@ -60,7 +55,7 @@ public final class ImmutableFlowDefinition implements com.bocom.rdss.spark.sdp3x
       Set<String> inputDatasets,
       com.bocom.rdss.spark.sdp3x.api.FlowQuery query) {
     return new ImmutableFlowDefinition(name, targetDataset, com.bocom.rdss.spark.sdp3x.api.FlowMode.BATCH, inputDatasets,
-      Collections.<String, String>emptyMap(), query);
+      query);
   }
 
   /** Creates a one-time batch flow definition. */
@@ -70,14 +65,7 @@ public final class ImmutableFlowDefinition implements com.bocom.rdss.spark.sdp3x
       Set<String> inputDatasets,
       com.bocom.rdss.spark.sdp3x.api.FlowQuery query) {
     return new ImmutableFlowDefinition(name, targetDataset, com.bocom.rdss.spark.sdp3x.api.FlowMode.ONCE, inputDatasets,
-      Collections.<String, String>emptyMap(), query);
-  }
-
-  /** Returns a copy with one additional per-flow Spark configuration entry. */
-  public ImmutableFlowDefinition withSparkConf(String key, String value) {
-    LinkedHashMap<String, String> updated = new LinkedHashMap<>(sparkConf);
-    updated.put(key, value);
-    return new ImmutableFlowDefinition(name, targetDataset, mode, inputDatasets, updated, query);
+      query);
   }
 
   /** {@inheritDoc} */
@@ -102,12 +90,6 @@ public final class ImmutableFlowDefinition implements com.bocom.rdss.spark.sdp3x
   @Override
   public Set<String> inputDatasets() {
     return inputDatasets;
-  }
-
-  /** {@inheritDoc} */
-  @Override
-  public Map<String, String> sparkConf() {
-    return sparkConf;
   }
 
   /** {@inheritDoc} */

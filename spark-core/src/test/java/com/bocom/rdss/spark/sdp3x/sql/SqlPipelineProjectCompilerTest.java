@@ -15,7 +15,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
@@ -50,8 +49,7 @@ class SqlPipelineProjectCompilerTest {
       Collections.singleton("raw.orders"),
       first,
       1,
-      ExecutionMode.QUERY_RESULT,
-      Collections.singletonMap("spark.sql.shuffle.partitions", "4"))));
+      ExecutionMode.QUERY_RESULT)));
     when(parser.parse(second, 2)).thenReturn(Arrays.asList(
       new SqlPipelineDefinition(
         "ods.order$detail",
@@ -60,8 +58,7 @@ class SqlPipelineProjectCompilerTest {
         Collections.singleton("raw.orders"),
         second,
         2,
-        ExecutionMode.QUERY_RESULT,
-        Collections.<String, String>emptyMap()),
+        ExecutionMode.QUERY_RESULT),
       new SqlPipelineDefinition(
         "ads.daily_orders",
         com.bocom.rdss.spark.sdp3x.api.DatasetKind.TABLE,
@@ -69,11 +66,7 @@ class SqlPipelineProjectCompilerTest {
         Collections.singleton("ods.order$detail"),
         second,
         3,
-        ExecutionMode.SQL_STATEMENT,
-        new LinkedHashMap<String, String>() {{
-          put("spark.sql.shuffle.partitions", "2");
-          put("spark.sql.autoBroadcastJoinThreshold", "-1");
-        }})));
+        ExecutionMode.SQL_STATEMENT)));
 
     PipelineDefinition pipeline = new SqlPipelineProjectCompiler(specLoader, parser).compile(tempDir);
 
@@ -93,12 +86,6 @@ class SqlPipelineProjectCompilerTest {
     assertEquals("3", tableDataset.properties().get(SqlPipelineDatasetProperties.STATEMENT_INDEX));
     assertTrue(pipeline.flow("sql_flow_001_ods.order_detail").isPresent());
     assertTrue(pipeline.flow("sql_flow_003_ads.daily_orders").isPresent());
-    assertEquals("4", pipeline.flow("sql_flow_001_ods.order_detail").orElseThrow(AssertionError::new)
-      .sparkConf().get("spark.sql.shuffle.partitions"));
-    assertEquals("2", pipeline.flow("sql_flow_003_ads.daily_orders").orElseThrow(AssertionError::new)
-      .sparkConf().get("spark.sql.shuffle.partitions"));
-    assertEquals("-1", pipeline.flow("sql_flow_003_ads.daily_orders").orElseThrow(AssertionError::new)
-      .sparkConf().get("spark.sql.autoBroadcastJoinThreshold"));
   }
 
   @Test

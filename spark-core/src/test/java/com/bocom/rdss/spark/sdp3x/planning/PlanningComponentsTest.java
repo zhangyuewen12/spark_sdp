@@ -75,8 +75,7 @@ class PlanningComponentsTest {
       pipeline,
       flows,
       upstream,
-      downstream,
-      new LinkedHashMap<String, java.util.List<String>>());
+      downstream);
 
     PipelineValidationException exception = assertThrows(
       PipelineValidationException.class,
@@ -99,7 +98,7 @@ class PlanningComponentsTest {
 
     ArrayList<ExecutionStage> stages = new ArrayList<>();
     stages.add(stage);
-    ExecutionPlan plan = new ExecutionPlan(null, null, stages);
+    ExecutionPlan plan = new ExecutionPlan(null, stages);
     stages.clear();
 
     assertEquals(0, stage.index());

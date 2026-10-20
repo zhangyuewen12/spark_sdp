@@ -6,7 +6,6 @@ import com.bocom.rdss.spark.sdp3x.api.ImmutableDatasetDefinition;
 import com.bocom.rdss.spark.sdp3x.api.ImmutableFlowDefinition;
 import com.bocom.rdss.spark.sdp3x.api.PipelineBuilder;
 import com.bocom.rdss.spark.sdp3x.api.PipelineDefinition;
-import com.bocom.rdss.spark.sdp3x.graph.DependencyGraph;
 import com.bocom.rdss.spark.sdp3x.graph.PipelineValidationException;
 import com.bocom.rdss.spark.sdp3x.planning.ExecutionPlan;
 import com.bocom.rdss.spark.sdp3x.planning.ExecutionStage;
@@ -21,7 +20,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -183,23 +181,8 @@ class LocalPipelineExecutorTest {
   }
 
   private ExecutionPlan planFor(PipelineDefinition pipeline, FlowDefinition... flows) {
-    LinkedHashMap<String, FlowDefinition> flowsByName = new LinkedHashMap<>();
-    LinkedHashMap<String, java.util.Set<String>> upstream = new LinkedHashMap<>();
-    LinkedHashMap<String, java.util.Set<String>> downstream = new LinkedHashMap<>();
-    for (FlowDefinition flow : flows) {
-      flowsByName.put(flow.name(), flow);
-      upstream.put(flow.name(), Collections.<String>emptySet());
-      downstream.put(flow.name(), Collections.<String>emptySet());
-    }
-    DependencyGraph graph = new DependencyGraph(
-      pipeline,
-      flowsByName,
-      upstream,
-      downstream,
-      new LinkedHashMap<String, java.util.List<String>>());
     return new ExecutionPlan(
       pipeline,
-      graph,
       Collections.singletonList(new ExecutionStage(0, Arrays.asList(flows))));
   }
 }

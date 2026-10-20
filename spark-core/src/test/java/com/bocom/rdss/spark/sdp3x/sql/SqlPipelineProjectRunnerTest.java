@@ -142,7 +142,7 @@ class SqlPipelineProjectRunnerTest {
       SqlPipelineProjectException.class,
       () -> new SqlPipelineProjectSpecLoader().load(tempDir));
 
-    assertTrue(exception.getMessage().contains("Missing SQL pipeline spec file under"));
+    assertTrue(exception.getMessage().contains("Missing spark-pipeline.yaml under"));
   }
 
   @Test

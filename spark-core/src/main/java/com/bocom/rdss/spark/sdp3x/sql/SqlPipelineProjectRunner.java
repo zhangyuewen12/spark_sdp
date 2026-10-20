@@ -4,7 +4,6 @@ import com.bocom.rdss.spark.sdp3x.PipelineOrchestrator;
 import com.bocom.rdss.spark.sdp3x.api.PipelineDefinition;
 import com.bocom.rdss.spark.sdp3x.execution.ExecutionOptions;
 import com.bocom.rdss.spark.sdp3x.execution.ExecutionReport;
-import com.bocom.rdss.spark.sdp3x.planning.ExecutionPlan;
 import org.apache.spark.sql.SparkSession;
 
 import java.nio.file.Path;
@@ -29,10 +28,6 @@ public final class SqlPipelineProjectRunner {
 
   public PipelineDefinition compile(SqlPipelineProjectSpec spec) {
     return compiler.compile(spec);
-  }
-
-  public ExecutionPlan dryRun(Path projectRoot) {
-    return new PipelineOrchestrator().planInDeclarationOrder(compile(projectRoot));
   }
 
   public ExecutionReport run(Path projectRoot, SparkSession sparkSession,

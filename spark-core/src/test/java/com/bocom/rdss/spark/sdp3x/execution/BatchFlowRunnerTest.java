@@ -7,9 +7,7 @@ import com.bocom.rdss.spark.sdp3x.sql.SqlPipelineDatasetProperties;
 import org.apache.spark.sql.DataFrameWriter;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RuntimeConfig;
 import org.apache.spark.sql.SaveMode;
-import org.apache.spark.sql.SparkSession;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -24,10 +22,6 @@ import static org.mockito.Mockito.*;
 class BatchFlowRunnerTest {
   @Mock
   private PipelineRuntime runtime;
-  @Mock
-  private SparkSession sparkSession;
-  @Mock
-  private RuntimeConfig runtimeConfig;
   @SuppressWarnings("unchecked")
   @Mock
   private Dataset<Row> dataset;
@@ -54,10 +48,7 @@ class BatchFlowRunnerTest {
       "clean_orders",
       "orders_clean",
       Collections.singleton("orders_source"),
-      ignored -> dataset).withSparkConf("spark.sql.shuffle.partitions", "1");
-    when(runtime.spark()).thenReturn(sparkSession);
-    when(sparkSession.conf()).thenReturn(runtimeConfig);
-    when(runtimeConfig.getOption("spark.sql.shuffle.partitions")).thenReturn(scala.Option.empty());
+      ignored -> dataset);
     when(dataset.isStreaming()).thenReturn(false);
 
     FlowExecutionResult result = runner.run(
@@ -67,8 +58,6 @@ class BatchFlowRunnerTest {
       ExecutionOptions.defaults());
 
     verify(dataset).createOrReplaceTempView("orders_clean");
-    verify(runtimeConfig).set("spark.sql.shuffle.partitions", "1");
-    verify(runtimeConfig).unset("spark.sql.shuffle.partitions");
     assertEquals("clean_orders", result.flowName());
     assertEquals("orders_clean", result.targetDataset());
   }
@@ -81,8 +70,6 @@ class BatchFlowRunnerTest {
       "daily_orders",
       Collections.singleton("orders_clean"),
       ignored -> dataset);
-    when(runtime.spark()).thenReturn(sparkSession);
-    when(sparkSession.conf()).thenReturn(runtimeConfig);
     when(dataset.isStreaming()).thenReturn(false);
 
     runner.run(
@@ -103,8 +90,6 @@ class BatchFlowRunnerTest {
       "daily_orders",
       Collections.singleton("orders_clean"),
       ignored -> dataset);
-    when(runtime.spark()).thenReturn(sparkSession);
-    when(sparkSession.conf()).thenReturn(runtimeConfig);
     when(dataset.isStreaming()).thenReturn(false);
     when(dataset.write()).thenReturn(writer);
     when(writer.mode(SaveMode.Overwrite)).thenReturn(writer);
@@ -123,8 +108,6 @@ class BatchFlowRunnerTest {
   @Test
   void shouldRejectNullOrStreamingQueryResults() {
     BatchFlowRunner runner = new BatchFlowRunner();
-    when(runtime.spark()).thenReturn(sparkSession);
-    when(sparkSession.conf()).thenReturn(runtimeConfig);
 
     NullPointerException nullResult = assertThrows(
       NullPointerException.class,

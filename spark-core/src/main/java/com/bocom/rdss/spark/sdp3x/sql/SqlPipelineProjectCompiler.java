@@ -69,11 +69,6 @@ public final class SqlPipelineProjectCompiler {
           definition.datasetName(),
           definition.inputDatasets(),
           runtime -> runtime.spark().sql(definition.querySql()));
-        for (java.util.Map.Entry<String, String> sparkConfEntry : definition.sparkConf().entrySet()) {
-          flowDefinition = flowDefinition.withSparkConf(
-            sparkConfEntry.getKey(),
-            sparkConfEntry.getValue());
-        }
         pipelineBuilder.addFlow(flowDefinition);
       }
     }

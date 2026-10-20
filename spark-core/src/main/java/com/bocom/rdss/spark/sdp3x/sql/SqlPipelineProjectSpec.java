@@ -19,7 +19,6 @@ public final class SqlPipelineProjectSpec {
   private final String database;
   private final Map<String, String> configuration;
   private final SqlFileSource sqlFileSource;
-  private final Path taskFile;
   private final JobType jobType;
   private final List<String> compactionTables;
 
@@ -61,7 +60,7 @@ public final class SqlPipelineProjectSpec {
       jobType == JobType.SPARK_SQL && taskFile != null
         ? SqlFileSource.fromSqlFile(taskFile)
         : SqlFileSource.fromSqlDirectories(sqlDirectories),
-      jobType, compactionTables, taskFile);
+      jobType, compactionTables);
   }
 
   SqlPipelineProjectSpec(
@@ -72,15 +71,13 @@ public final class SqlPipelineProjectSpec {
       Map<String, String> configuration,
       SqlFileSource sqlFileSource,
       JobType jobType,
-      List<String> compactionTables,
-      Path taskFile) {
+      List<String> compactionTables) {
     this.rootDirectory = rootDirectory;
     this.name = name;
     this.catalog = catalog;
     this.database = database;
     this.configuration = Collections.unmodifiableMap(new LinkedHashMap<>(configuration));
     this.sqlFileSource = sqlFileSource;
-    this.taskFile = taskFile;
     this.jobType = jobType;
     this.compactionTables = Collections.unmodifiableList(new ArrayList<>(compactionTables));
   }
@@ -111,10 +108,6 @@ public final class SqlPipelineProjectSpec {
 
   List<Path> sqlFiles() {
     return sqlFileSource.resolveSqlFiles();
-  }
-
-  public Path taskFile() {
-    return taskFile;
   }
 
   public JobType jobType() {

@@ -5,9 +5,7 @@ import com.bocom.rdss.spark.sdp3x.enums.ExecutionMode;
 
 import java.nio.file.Path;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -21,7 +19,6 @@ public final class SqlPipelineDefinition {
   private final Path sourceFile;
   private final int statementIndex;
   private final ExecutionMode executionMode;
-  private final Map<String, String> sparkConf;
 
   public SqlPipelineDefinition(
       String datasetName,
@@ -30,8 +27,7 @@ public final class SqlPipelineDefinition {
       Set<String> inputDatasets,
       Path sourceFile,
       int statementIndex,
-      ExecutionMode executionMode,
-      Map<String, String> sparkConf) {
+      ExecutionMode executionMode) {
     this.datasetName = datasetName;
     this.datasetKind = datasetKind;
     this.querySql = querySql;
@@ -39,7 +35,6 @@ public final class SqlPipelineDefinition {
     this.sourceFile = sourceFile;
     this.statementIndex = statementIndex;
     this.executionMode = executionMode;
-    this.sparkConf = Collections.unmodifiableMap(new LinkedHashMap<>(sparkConf));
   }
 
   public String datasetName() {
@@ -68,9 +63,5 @@ public final class SqlPipelineDefinition {
 
   public ExecutionMode executionMode() {
     return executionMode;
-  }
-
-  public Map<String, String> sparkConf() {
-    return sparkConf;
   }
 }

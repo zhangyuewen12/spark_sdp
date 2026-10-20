@@ -44,24 +44,6 @@ class ScopeAndMaterializerTest {
   private DataFrameWriter<Row> writer;
 
   @Test
-  void sparkConfScopeShouldApplyOverridesAndRestorePreviousValues() {
-    when(sparkSession.conf()).thenReturn(runtimeConfig);
-    when(runtimeConfig.getOption("spark.sql.adaptive.enabled")).thenReturn(Option.apply("true"));
-    when(runtimeConfig.getOption("spark.sql.shuffle.partitions")).thenReturn(Option.empty());
-
-    try (SparkConfScope ignored = new SparkConfScope(sparkSession, new LinkedHashMap<String, String>() {{
-      put("spark.sql.adaptive.enabled", "false");
-      put("spark.sql.shuffle.partitions", "1");
-    }})) {
-      verify(runtimeConfig).set("spark.sql.adaptive.enabled", "false");
-      verify(runtimeConfig).set("spark.sql.shuffle.partitions", "1");
-    }
-
-    verify(runtimeConfig).set("spark.sql.adaptive.enabled", "true");
-    verify(runtimeConfig).unset("spark.sql.shuffle.partitions");
-  }
-
-  @Test
   void pipelineSessionScopeShouldApplySessionStateAndRestoreIt() {
     PipelineDefinition pipeline = mock(PipelineDefinition.class);
     when(sparkSession.conf()).thenReturn(runtimeConfig);
