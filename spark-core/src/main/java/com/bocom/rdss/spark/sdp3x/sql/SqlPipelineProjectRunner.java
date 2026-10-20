@@ -27,6 +27,10 @@ public final class SqlPipelineProjectRunner {
     return compiler.compile(projectRoot);
   }
 
+  public PipelineDefinition compile(SqlPipelineProjectSpec spec) {
+    return compiler.compile(spec);
+  }
+
   public ExecutionPlan dryRun(Path projectRoot) {
     return new PipelineOrchestrator().planInDeclarationOrder(compile(projectRoot));
   }

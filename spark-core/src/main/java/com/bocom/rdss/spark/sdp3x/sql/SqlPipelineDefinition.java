@@ -1,6 +1,7 @@
 package com.bocom.rdss.spark.sdp3x.sql;
 
 import com.bocom.rdss.spark.sdp3x.api.DatasetKind;
+import com.bocom.rdss.spark.sdp3x.enums.ExecutionMode;
 
 import java.nio.file.Path;
 import java.util.Collections;
@@ -13,11 +14,6 @@ import java.util.Set;
  * Holds one parsed SQL dataset definition before it is translated to the Java pipeline model.
  */
 public final class SqlPipelineDefinition {
-  public enum ExecutionMode {
-    QUERY_RESULT,
-    SQL_STATEMENT
-  }
-
   private final String datasetName;
   private final DatasetKind datasetKind;
   private final String querySql;

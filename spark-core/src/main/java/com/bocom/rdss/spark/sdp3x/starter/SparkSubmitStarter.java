@@ -6,6 +6,7 @@ import org.yaml.snakeyaml.Yaml;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
+import java.io.UncheckedIOException;
 import java.net.URISyntaxException;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -20,8 +21,8 @@ import java.util.Map;
 import java.util.Properties;
 
 /**
- * Submission entrypoint (entrypoint A). It reads a job directory and starts entrypoint B through
- * {@code spark-submit} in Yarn cluster mode.
+ * Submission entrypoint (entrypoint A). It packages a job directory or a spec plus one task file,
+ * then starts entrypoint B through {@code spark-submit} in Yarn cluster mode.
  */
 public final class SparkSubmitStarter {
   static final String APPLICATION_CLASS =
@@ -67,12 +68,16 @@ public final class SparkSubmitStarter {
   }
 
   static List<String> buildCommand(StarterOptions options, Path applicationJar) {
+    Path taskFile = options.taskFilePath == null ? null : resolveTaskFile(options.taskFilePath);
     Path specPath = resolveSpec(options.specPath);
     Path jobDirectory = specPath.getParent();
     Map<String, String> configuration = loadConfiguration(specPath);
+    if ("hudi-compaction".equals(configuration.get("job-type")) && taskFile == null) {
+      throw new IllegalArgumentException("Hudi compaction job requires --task-file <tables.list>");
+    }
     Map<String, String> commonSparkConfiguration =
       loadCommonSparkConfiguration(options.confPath);
-    Path jobArchive = createJobArchive(jobDirectory);
+    Path jobArchive = createJobArchive(jobDirectory, specPath, taskFile);
 
     List<String> command = new ArrayList<>();
     command.add(resolveSparkSubmit());
@@ -86,6 +91,10 @@ public final class SparkSubmitStarter {
     command.add("--submitted");
     command.add("--spec");
     command.add(DISTRIBUTED_JOB_DIRECTORY + "/" + specPath.getFileName());
+    if (taskFile != null) {
+      command.add("--task-file");
+      command.add(DISTRIBUTED_JOB_DIRECTORY + "/task/" + taskFile.getFileName());
+    }
     return Collections.unmodifiableList(command);
   }
 
@@ -160,9 +169,9 @@ public final class SparkSubmitStarter {
   private static Path resolveSpec(Path requestedPath) {
     Path path = requestedPath.toAbsolutePath().normalize();
     if (Files.isRegularFile(path)) {
-      if (!"spark-pipeline.yaml".equals(path.getFileName().toString())) {
-        throw new IllegalArgumentException(
-          "Job spec file must be named spark-pipeline.yaml: " + path);
+      String fileName = path.getFileName().toString();
+      if (!fileName.endsWith(".yaml") && !fileName.endsWith(".yml")) {
+        throw new IllegalArgumentException("Job spec must be a YAML file: " + path);
       }
       return path;
     }
@@ -174,6 +183,14 @@ public final class SparkSubmitStarter {
       throw new IllegalArgumentException("Job directory must contain spark-pipeline.yaml: " + path);
     }
     return specPath;
+  }
+
+  private static Path resolveTaskFile(Path requestedPath) {
+    Path path = requestedPath.toAbsolutePath().normalize();
+    if (!Files.isRegularFile(path) || !Files.isReadable(path)) {
+      throw new IllegalArgumentException("--task-file must be a readable file: " + path);
+    }
+    return path;
   }
 
   private static Map<String, String> loadConfiguration(Path specPath) {
@@ -229,34 +246,41 @@ public final class SparkSubmitStarter {
     return result;
   }
 
-  private static Path createJobArchive(Path jobDirectory) {
+  private static Path createJobArchive(Path jobDirectory, Path specPath, Path taskFile) {
     try {
       Path archive = Files.createTempFile("spark-sdp-job-", ".zip");
       Files.deleteIfExists(archive);
       Map<String, String> environment = Collections.singletonMap("create", "true");
       try (FileSystem zip = FileSystems.newFileSystem(
           java.net.URI.create("jar:" + archive.toUri()), environment)) {
-        try (java.util.stream.Stream<Path> paths = Files.walk(jobDirectory)) {
-          paths.filter(Files::isRegularFile)
-            .filter(source -> shouldArchive(jobDirectory.relativize(source)))
-            .forEach(source -> {
-            Path target = zip.getPath("/" + jobDirectory.relativize(source).toString());
-            try {
-              if (target.getParent() != null) {
-                Files.createDirectories(target.getParent());
-              }
-              Files.copy(source, target);
-            } catch (IOException e) {
-              throw new ArchiveException(e);
-            }
-          });
+        if (taskFile != null) {
+          copyToArchive(specPath, zip.getPath("/" + specPath.getFileName()));
+          copyToArchive(taskFile, zip.getPath("/task/" + taskFile.getFileName()));
+        } else {
+          try (java.util.stream.Stream<Path> paths = Files.walk(jobDirectory)) {
+            paths.filter(Files::isRegularFile)
+              .filter(source -> shouldArchive(jobDirectory.relativize(source)))
+              .forEach(source -> copyToArchive(
+                source, zip.getPath("/" + jobDirectory.relativize(source).toString())));
+          }
         }
       }
       archive.toFile().deleteOnExit();
       return archive;
-    } catch (IOException | ArchiveException e) {
-      Throwable cause = e instanceof ArchiveException ? e.getCause() : e;
+    } catch (IOException | UncheckedIOException e) {
+      Throwable cause = e instanceof UncheckedIOException ? e.getCause() : e;
       throw new IllegalStateException("Failed to archive job directory: " + jobDirectory, cause);
+    }
+  }
+
+  private static void copyToArchive(Path source, Path target) {
+    try {
+      if (target.getParent() != null) {
+        Files.createDirectories(target.getParent());
+      }
+      Files.copy(source, target);
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
     }
   }
 
@@ -313,80 +337,11 @@ public final class SparkSubmitStarter {
     System.out.println("Usage:");
     System.out.println("  java -cp spark-sdp-1.0.jar " + SparkSubmitStarter.class.getName()
       + " --spec <job-directory-or-spec-file> [--conf <spark-properties-file>]"
+      + " [--task-file <job-input-file>]"
       + " [--files <file1,file2,...>]"
       + " [--jars <jar1,jar2,...>]");
     System.out.println();
     System.out.println("SPARK_HOME must point to the Spark installation. Defaults: master=yarn, deploy-mode=cluster.");
   }
 
-  static final class StarterOptions {
-    private final Path specPath;
-    private final Path confPath;
-    private final String files;
-    private final String jars;
-    private final boolean help;
-
-    private StarterOptions(
-        Path specPath, Path confPath, String files, String jars, boolean help) {
-      this.specPath = specPath;
-      this.confPath = confPath;
-      this.files = files;
-      this.jars = jars;
-      this.help = help;
-    }
-
-    static StarterOptions parse(String[] args) {
-      if (args.length == 1 && ("--help".equals(args[0]) || "-h".equals(args[0]))) {
-        return new StarterOptions(null, null, null, null, true);
-      }
-      Path specPath = null;
-      Path confPath = null;
-      String files = null;
-      String jars = null;
-      for (int index = 0; index < args.length; index += 2) {
-        if (index + 1 >= args.length) {
-          throw new IllegalArgumentException("Missing value for option: " + args[index]);
-        }
-        if ("--spec".equals(args[index])) {
-          if (specPath != null) {
-            throw new IllegalArgumentException("Option --spec may only be specified once.");
-          }
-          specPath = Paths.get(args[index + 1]);
-        } else if ("--conf".equals(args[index])) {
-          if (confPath != null) {
-            throw new IllegalArgumentException("Option --conf may only be specified once.");
-          }
-          confPath = Paths.get(args[index + 1]);
-        } else if ("--files".equals(args[index])) {
-          if (files != null) {
-            throw new IllegalArgumentException("Option --files may only be specified once.");
-          }
-          files = args[index + 1].trim();
-          if (files.isEmpty()) {
-            throw new IllegalArgumentException("Option --files must not be empty.");
-          }
-        } else if ("--jars".equals(args[index])) {
-          if (jars != null) {
-            throw new IllegalArgumentException("Option --jars may only be specified once.");
-          }
-          jars = args[index + 1].trim();
-          if (jars.isEmpty()) {
-            throw new IllegalArgumentException("Option --jars must not be empty.");
-          }
-        } else {
-          throw new IllegalArgumentException("Unknown option: " + args[index]);
-        }
-      }
-      if (specPath == null) {
-        throw new IllegalArgumentException("Required option is missing: --spec");
-      }
-      return new StarterOptions(specPath, confPath, files, jars, false);
-    }
-  }
-
-  private static final class ArchiveException extends RuntimeException {
-    private ArchiveException(IOException cause) {
-      super(cause);
-    }
-  }
 }

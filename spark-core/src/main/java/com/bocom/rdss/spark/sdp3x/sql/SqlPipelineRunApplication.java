@@ -4,9 +4,13 @@ import com.bocom.rdss.spark.sdp3x.PipelineOrchestrator;
 import com.bocom.rdss.spark.sdp3x.api.DatasetDefinition;
 import com.bocom.rdss.spark.sdp3x.api.DatasetKind;
 import com.bocom.rdss.spark.sdp3x.api.PipelineDefinition;
+import com.bocom.rdss.spark.sdp3x.enums.JobType;
 import com.bocom.rdss.spark.sdp3x.execution.ExecutionOptions;
 import com.bocom.rdss.spark.sdp3x.execution.ExecutionReport;
+import com.bocom.rdss.spark.sdp3x.util.SqlIdentifierUtils;
 import org.apache.spark.sql.SparkSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 
@@ -15,8 +19,10 @@ import java.io.InputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -24,6 +30,7 @@ import java.util.Optional;
  * Spark-aware entrypoint for executing SQL pipeline projects.
  */
 public final class SqlPipelineRunApplication {
+  private static final Logger LOG = LoggerFactory.getLogger(SqlPipelineRunApplication.class);
   static final String DEV_HIVE_SITE_RESOURCE = "dev/hive-site.xml";
   static final String LOCAL_DEV_HIVE_ENABLED_PROPERTY = "spark.sdp.local.dev-hive.enabled";
 
@@ -37,24 +44,72 @@ public final class SqlPipelineRunApplication {
   }
 
   public static void run(SqlPipelineRunOptions cliOptions) {
-    SqlPipelineProjectRunner runner = new SqlPipelineProjectRunner();
-    PipelineDefinition pipelineDefinition = runner.compile(cliOptions.projectPath());
-    SparkSessionContext sparkSessionContext = createSparkSession(cliOptions, pipelineDefinition);
+    SqlPipelineProjectSpec jobSpec = new SqlPipelineProjectSpecLoader()
+      .load(cliOptions.projectPath(), cliOptions.taskFilePath());
+    PipelineDefinition pipelineDefinition = jobSpec.jobType() == JobType.SPARK_SQL
+      ? new SqlPipelineProjectRunner().compile(jobSpec) : null;
+    String applicationName = pipelineDefinition == null ? jobSpec.name() : pipelineDefinition.name();
+    SparkSessionContext sparkSessionContext = createSparkSession(
+      cliOptions, applicationName, jobSpec.jobType());
     SparkSession sparkSession = sparkSessionContext.sparkSession();
 
     try {
-      if (sparkSessionContext.localWarehouseDirectory() != null) {
-        resetLocalManagedDatasets(
-          sparkSession,
+      if (jobSpec.jobType() == JobType.HUDI_COMPACTION) {
+        List<String> failedTables = new ArrayList<>();
+        for (String table : jobSpec.compactionTables()) {
+          try {
+            String qualifiedTable = SqlIdentifierUtils.quoteQualifiedTable(table);
+            List<org.apache.spark.sql.Row> plans = sparkSession.sql(
+                "SHOW COMPACTION ON " + qualifiedTable).collectAsList();
+            if (plans.stream().anyMatch(row -> "INFLIGHT".equalsIgnoreCase(row.getString(2)))) {
+              LOG.warn("Skipping {}: inflight compaction exists", table);
+              continue;
+            }
+            org.apache.spark.sql.Row requested = plans.stream()
+                .filter(row -> "REQUESTED".equalsIgnoreCase(row.getString(2)))
+                .min(Comparator.comparing(row -> row.getString(0))).orElse(null);
+            if (requested == null) {
+              LOG.info("Skipping {}: no requested compaction plan", table);
+              continue;
+            }
+            String instant = requested.getString(0);
+            if (!instant.matches("[1-9][0-9]{13,16}")) {
+              throw new IllegalArgumentException("Invalid compaction instant: " + instant);
+            }
+            String sql = "RUN COMPACTION ON " + qualifiedTable + " AT " + instant;
+            LOG.info("Executing {}", sql);
+            sparkSession.sql(sql).collectAsList();
+            boolean completed = sparkSession.sql("SHOW COMPACTION ON " + qualifiedTable)
+                .collectAsList().stream().anyMatch(row -> instant.equals(row.getString(0))
+                    && "COMPLETED".equalsIgnoreCase(row.getString(2)));
+            if (!completed) {
+              throw new IllegalStateException("Compaction SQL returned without a completed instant: "
+                  + table + " at " + instant);
+            }
+            LOG.info("Completed compaction: {} at {}", table, instant);
+          } catch (Exception e) {
+            failedTables.add(table);
+            LOG.error("Compaction failed for {}", table, e);
+          }
+        }
+        if (!failedTables.isEmpty()) {
+          throw new IllegalStateException("Compaction failed for " + failedTables.size()
+              + " table(s): " + String.join(", ", failedTables));
+        }
+      } else {
+        if (sparkSessionContext.localWarehouseDirectory() != null) {
+          resetLocalManagedDatasets(
+            sparkSession,
+            pipelineDefinition,
+            sparkSessionContext.localWarehouseDirectory());
+        }
+        ExecutionReport report = new PipelineOrchestrator().runInDeclarationOrder(
           pipelineDefinition,
-          sparkSessionContext.localWarehouseDirectory());
+          sparkSession,
+          ExecutionOptions.defaults());
+        LOG.info("Executed {} flow(s) for pipeline '{}'", report.results().size(),
+          pipelineDefinition.name());
       }
-      ExecutionReport report = new PipelineOrchestrator().runInDeclarationOrder(
-        pipelineDefinition,
-        sparkSession,
-        ExecutionOptions.defaults());
-      System.out.println(
-        "Executed " + report.results().size() + " flow(s) for pipeline '" + pipelineDefinition.name() + "'.");
     } finally {
       sparkSession.stop();
     }
@@ -83,7 +138,8 @@ public final class SqlPipelineRunApplication {
 
   private static SparkSessionContext createSparkSession(
       SqlPipelineRunOptions cliOptions,
-      PipelineDefinition pipelineDefinition) {
+      String applicationName,
+      JobType jobType) {
     String localMaster = null;
     if (cliOptions.master() != null) {
       localMaster = cliOptions.master();
@@ -92,7 +148,7 @@ public final class SqlPipelineRunApplication {
     }
     boolean localExecution = localMaster != null && localMaster.startsWith("local");
     if (!localExecution) {
-      return new SparkSessionContext(newSparkBuilder(cliOptions, pipelineDefinition).getOrCreate(), null);
+      return new SparkSessionContext(newSparkBuilder(cliOptions, applicationName, jobType).getOrCreate(), null);
     }
 
     Optional<Map<String, String>> preferredHiveSite =
@@ -100,32 +156,36 @@ public final class SqlPipelineRunApplication {
     if (preferredHiveSite.isPresent()) {
       SparkSession preferredSession = null;
       try {
-        SparkSession.Builder preferredBuilder = newSparkBuilder(cliOptions, pipelineDefinition);
+        SparkSession.Builder preferredBuilder = newSparkBuilder(cliOptions, applicationName, jobType);
         applyHiveSiteProperties(preferredBuilder, preferredHiveSite.get());
         preferredSession = preferredBuilder.getOrCreate();
         preferredSession.catalog().listDatabases().collectAsList();
-        System.out.println(
-          "Local startup loaded Hive metastore settings from classpath resource '" + DEV_HIVE_SITE_RESOURCE + "'.");
+        LOG.info("Local startup loaded Hive metastore settings from classpath resource '{}'",
+          DEV_HIVE_SITE_RESOURCE);
         return new SparkSessionContext(preferredSession, null);
       } catch (RuntimeException e) {
         stopQuietly(preferredSession);
-        System.err.println(
-          "Local startup could not use classpath resource '" + DEV_HIVE_SITE_RESOURCE
-            + "' and will fall back to an embedded Derby metastore. Cause: " + e.getMessage());
+        LOG.warn("Local startup could not use classpath resource '{}' and will fall back to an "
+          + "embedded Derby metastore", DEV_HIVE_SITE_RESOURCE, e);
       }
     }
 
-    SparkSession.Builder derbyBuilder = newSparkBuilder(cliOptions, pipelineDefinition);
+    SparkSession.Builder derbyBuilder = newSparkBuilder(cliOptions, applicationName, jobType);
     Path localWarehouseDirectory = applyEmbeddedDerbyMetastore(cliOptions.projectPath(), derbyBuilder);
     return new SparkSessionContext(derbyBuilder.getOrCreate(), localWarehouseDirectory);
   }
 
   private static SparkSession.Builder newSparkBuilder(
       SqlPipelineRunOptions cliOptions,
-      PipelineDefinition pipelineDefinition) {
+      String applicationName,
+      JobType jobType) {
     SparkSession.Builder sparkBuilder = SparkSession.builder()
-      .appName(pipelineDefinition.name())
+      .appName(applicationName)
       .enableHiveSupport();
+    if (jobType == JobType.HUDI_COMPACTION) {
+      sparkBuilder.config("spark.sql.extensions",
+          "org.apache.spark.sql.hudi.HoodieSparkSessionExtension");
+    }
     if (cliOptions.master() != null) {
       sparkBuilder.master(cliOptions.master());
     } else if (!cliOptions.submittedViaSparkSubmit()) {
@@ -262,21 +322,4 @@ public final class SqlPipelineRunApplication {
     }
   }
 
-  private static final class SparkSessionContext {
-    private final SparkSession sparkSession;
-    private final Path localWarehouseDirectory;
-
-    private SparkSessionContext(SparkSession sparkSession, Path localWarehouseDirectory) {
-      this.sparkSession = sparkSession;
-      this.localWarehouseDirectory = localWarehouseDirectory;
-    }
-
-    private SparkSession sparkSession() {
-      return sparkSession;
-    }
-
-    private Path localWarehouseDirectory() {
-      return localWarehouseDirectory;
-    }
-  }
 }

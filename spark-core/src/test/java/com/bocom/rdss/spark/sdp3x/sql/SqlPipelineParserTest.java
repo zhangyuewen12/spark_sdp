@@ -1,5 +1,7 @@
 package com.bocom.rdss.spark.sdp3x.sql;
 
+import com.bocom.rdss.spark.sdp3x.enums.ExecutionMode;
+
 import com.bocom.rdss.spark.sdp3x.api.DatasetKind;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -43,7 +45,7 @@ class SqlPipelineParserTest {
     assertEquals("ods.orders_clean", tempView.datasetName());
     assertEquals(DatasetKind.TEMPORARY_VIEW, tempView.datasetKind());
     assertEquals(7, tempView.statementIndex());
-    assertEquals(SqlPipelineDefinition.ExecutionMode.QUERY_RESULT, tempView.executionMode());
+    assertEquals(ExecutionMode.QUERY_RESULT, tempView.executionMode());
     assertEquals("raw.orders_source", tempView.inputDatasets().iterator().next());
     assertTrue(tempView.inputDatasets().contains("dim.region_info"));
 
@@ -51,7 +53,7 @@ class SqlPipelineParserTest {
     assertEquals("analytics.daily_orders", insertInto.datasetName());
     assertEquals(DatasetKind.TABLE, insertInto.datasetKind());
     assertEquals(8, insertInto.statementIndex());
-    assertEquals(SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT, insertInto.executionMode());
+    assertEquals(ExecutionMode.SQL_STATEMENT, insertInto.executionMode());
     assertTrue(insertInto.querySql().startsWith("INSERT INTO TABLE analytics.daily_orders"));
     assertEquals("ods.orders_clean", insertInto.inputDatasets().iterator().next());
   }

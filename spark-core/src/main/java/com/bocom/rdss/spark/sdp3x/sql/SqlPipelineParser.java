@@ -1,6 +1,7 @@
 package com.bocom.rdss.spark.sdp3x.sql;
 
 import com.bocom.rdss.spark.sdp3x.api.DatasetKind;
+import com.bocom.rdss.spark.sdp3x.enums.ExecutionMode;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -81,7 +82,7 @@ public final class SqlPipelineParser {
         extractInputDatasets(querySql),
         sqlFile,
         statementIndex,
-        SqlPipelineDefinition.ExecutionMode.QUERY_RESULT,
+        ExecutionMode.QUERY_RESULT,
         sparkConf);
     }
 
@@ -95,7 +96,7 @@ public final class SqlPipelineParser {
         extractInputDatasets(statement),
         sqlFile,
         statementIndex,
-        SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT,
+        ExecutionMode.SQL_STATEMENT,
         sparkConf);
     }
 
@@ -104,7 +105,7 @@ public final class SqlPipelineParser {
       return new SqlPipelineDefinition(
         normalizeIdentifier(matcher.group(1)), DatasetKind.TABLE, statement,
         java.util.Collections.emptySet(), sqlFile, statementIndex,
-        SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT, sparkConf);
+        ExecutionMode.SQL_STATEMENT, sparkConf);
     }
 
     throw new SqlPipelineProjectException(

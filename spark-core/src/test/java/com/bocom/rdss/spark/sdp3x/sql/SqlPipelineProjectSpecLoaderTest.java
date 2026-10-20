@@ -19,7 +19,6 @@ class SqlPipelineProjectSpecLoaderTest {
   @Test
   void shouldLoadSpecFromDirectoryAndExplicitFile() throws IOException {
     Path transformations = Files.createDirectories(tempDir.resolve("sql"));
-    Path extra = Files.createDirectories(tempDir.resolve("more-sql"));
     Path specFile = tempDir.resolve("spark-pipeline.yaml");
     Files.write(specFile, (
       "name:  custom_pipeline  \n"
@@ -27,9 +26,7 @@ class SqlPipelineProjectSpecLoaderTest {
         + "database: analytics\n"
         + "configuration:\n"
         + "  spark.sql.shuffle.partitions: 1\n"
-        + "libraries:\n"
-        + "  - path: sql\n"
-        + "  - more-sql\n").getBytes(StandardCharsets.UTF_8));
+        + "transformation: sql\n").getBytes(StandardCharsets.UTF_8));
 
     SqlPipelineProjectSpec fromDirectory = loader.load(tempDir);
     SqlPipelineProjectSpec fromFile = loader.load(specFile);
@@ -39,26 +36,26 @@ class SqlPipelineProjectSpecLoaderTest {
     assertEquals("spark_catalog", fromDirectory.catalog());
     assertEquals("analytics", fromDirectory.database());
     assertEquals("1", fromDirectory.configuration().get("spark.sql.shuffle.partitions"));
-    assertEquals(2, fromDirectory.sqlDirectories().size());
-    assertTrue(fromDirectory.sqlDirectories().contains(transformations.toAbsolutePath().normalize()));
-    assertTrue(fromDirectory.sqlDirectories().contains(extra.toAbsolutePath().normalize()));
+    assertEquals(1, fromDirectory.sqlDirectories().size());
+    assertEquals(transformations.toAbsolutePath().normalize(), fromDirectory.sqlDirectories().get(0));
     assertEquals(fromDirectory.rootDirectory(), fromFile.rootDirectory());
   }
 
   @Test
-  void shouldRejectLegacySpecNames() throws IOException {
+  void shouldAcceptYamlFileNamesAndRejectNonYamlSpecs() throws IOException {
     Path legacyProperties = tempDir.resolve("spark-pipeline.properties");
-    Path legacyYml = tempDir.resolve("spark-pipeline.yml");
+    Path yamlSpec = tempDir.resolve("spark-pipeline.yml");
+    Files.createDirectories(tempDir.resolve("transformations"));
     Files.write(legacyProperties, "name=legacy\n".getBytes(StandardCharsets.UTF_8));
-    Files.write(legacyYml, "name: legacy\n".getBytes(StandardCharsets.UTF_8));
+    Files.write(yamlSpec, "name: yaml-job\n".getBytes(StandardCharsets.UTF_8));
 
     assertThrows(SqlPipelineProjectException.class, () -> loader.load(tempDir));
     assertThrows(SqlPipelineProjectException.class, () -> loader.load(legacyProperties));
-    assertThrows(SqlPipelineProjectException.class, () -> loader.load(legacyYml));
+    assertEquals("yaml-job", loader.load(yamlSpec).name());
   }
 
   @Test
-  void shouldDefaultNameAndLibrariesWhenOmitted() throws IOException {
+  void shouldDefaultNameAndTransformationWhenOmitted() throws IOException {
     Path transformations = Files.createDirectories(tempDir.resolve("transformations"));
     Files.write(
       tempDir.resolve("spark-pipeline.yaml"),
@@ -101,37 +98,24 @@ class SqlPipelineProjectSpecLoaderTest {
     assertTrue(assertThrows(SqlPipelineProjectException.class, () -> loader.load(invalidConfig))
       .getMessage().contains("configuration"));
 
-    Path invalidLibraries = Files.createDirectory(tempDir.resolve("invalid-libraries"));
-    Files.write(invalidLibraries.resolve("spark-pipeline.yaml"), "libraries: bad\n".getBytes(StandardCharsets.UTF_8));
-    assertTrue(assertThrows(SqlPipelineProjectException.class, () -> loader.load(invalidLibraries))
-      .getMessage().contains("libraries"));
+    Path invalidTransformation = Files.createDirectory(tempDir.resolve("invalid-transformation"));
+    Files.write(invalidTransformation.resolve("spark-pipeline.yaml"),
+      "transformation: []\n".getBytes(StandardCharsets.UTF_8));
+    assertTrue(assertThrows(SqlPipelineProjectException.class, () -> loader.load(invalidTransformation))
+      .getMessage().contains("transformation"));
   }
 
   @Test
-  void shouldRejectInvalidLibraryEntries() throws IOException {
-    Path missingPathEntry = Files.createDirectory(tempDir.resolve("missing-path-entry"));
-    Files.write(missingPathEntry.resolve("spark-pipeline.yaml"), (
-      "libraries:\n"
-        + "  - {}\n").getBytes(StandardCharsets.UTF_8));
-    assertTrue(assertThrows(SqlPipelineProjectException.class, () -> loader.load(missingPathEntry))
-      .getMessage().contains("'path' or 'file'"));
-
-    Path unsupportedEntry = Files.createDirectory(tempDir.resolve("unsupported-entry"));
-    Files.write(unsupportedEntry.resolve("spark-pipeline.yaml"), (
-      "libraries:\n"
-        + "  - 123\n").getBytes(StandardCharsets.UTF_8));
-    assertTrue(assertThrows(SqlPipelineProjectException.class, () -> loader.load(unsupportedEntry))
-      .getMessage().contains("Unsupported SQL library entry"));
-
-    Path emptyLibraries = Files.createDirectory(tempDir.resolve("empty-libraries"));
-    Files.write(emptyLibraries.resolve("spark-pipeline.yaml"), "libraries: []\n".getBytes(StandardCharsets.UTF_8));
-    assertTrue(assertThrows(SqlPipelineProjectException.class, () -> loader.load(emptyLibraries))
-      .getMessage().contains("At least one SQL library directory is required"));
+  void shouldRejectLegacyLibrariesAndMissingTransformationDirectory() throws IOException {
+    Path legacyLibraries = Files.createDirectory(tempDir.resolve("legacy-libraries"));
+    Files.write(legacyLibraries.resolve("spark-pipeline.yaml"),
+      "libraries:\n  - transformations\n".getBytes(StandardCharsets.UTF_8));
+    assertTrue(assertThrows(SqlPipelineProjectException.class, () -> loader.load(legacyLibraries))
+      .getMessage().contains("'libraries' is no longer supported"));
 
     Path missingDirectory = Files.createDirectory(tempDir.resolve("missing-directory"));
-    Files.write(missingDirectory.resolve("spark-pipeline.yaml"), (
-      "libraries:\n"
-        + "  - path: absent\n").getBytes(StandardCharsets.UTF_8));
+    Files.write(missingDirectory.resolve("spark-pipeline.yaml"),
+      "transformation: absent\n".getBytes(StandardCharsets.UTF_8));
     assertTrue(assertThrows(SqlPipelineProjectException.class, () -> loader.load(missingDirectory))
       .getMessage().contains("does not exist"));
   }

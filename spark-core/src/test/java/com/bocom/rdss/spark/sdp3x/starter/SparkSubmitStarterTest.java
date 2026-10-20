@@ -42,7 +42,7 @@ class SparkSubmitStarterTest {
     Path jar = Files.createFile(tempDir.resolve("spark-sdp.jar"));
 
     List<String> command = SparkSubmitStarter.buildCommand(
-      SparkSubmitStarter.StarterOptions.parse(new String[] {"--spec", jobDirectory.toString()}), jar);
+      StarterOptions.parse(new String[] {"--spec", jobDirectory.toString()}), jar);
 
     assertOption(command, "--master", "yarn");
     assertOption(command, "--deploy-mode", "cluster");
@@ -74,7 +74,7 @@ class SparkSubmitStarterTest {
     Path jar = Files.createFile(tempDir.resolve("configured-spark-sdp.jar"));
 
     List<String> command = SparkSubmitStarter.buildCommand(
-      SparkSubmitStarter.StarterOptions.parse(new String[] {
+      StarterOptions.parse(new String[] {
         "--conf", properties.toString(), "--spec", jobDirectory.toString()
       }), jar);
 
@@ -96,7 +96,7 @@ class SparkSubmitStarterTest {
 
     IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
       () -> SparkSubmitStarter.buildCommand(
-        SparkSubmitStarter.StarterOptions.parse(new String[] {
+        StarterOptions.parse(new String[] {
           "--spec", jobDirectory.toString(), "--conf", tempDir.resolve("missing.properties").toString()
         }), jar));
 
@@ -113,7 +113,7 @@ class SparkSubmitStarterTest {
     Path jar = Files.createFile(tempDir.resolve("jars-spark-sdp.jar"));
 
     List<String> command = SparkSubmitStarter.buildCommand(
-      SparkSubmitStarter.StarterOptions.parse(new String[] {
+      StarterOptions.parse(new String[] {
         "--spec", jobDirectory.toString(),
         "--jars", "/opt/jars/mysql.jar,/opt/jars/catalog.jar"
       }), jar);
@@ -133,7 +133,7 @@ class SparkSubmitStarterTest {
     Path jar = Files.createFile(tempDir.resolve("files-spark-sdp.jar"));
 
     List<String> command = SparkSubmitStarter.buildCommand(
-      SparkSubmitStarter.StarterOptions.parse(new String[] {
+      StarterOptions.parse(new String[] {
         "--spec", jobDirectory.toString(),
         "--files", "/etc/hive/conf/hive-site.xml"
       }), jar);
@@ -145,19 +145,19 @@ class SparkSubmitStarterTest {
   @Test
   void shouldRejectInvalidArguments() {
     assertThrows(IllegalArgumentException.class,
-      () -> SparkSubmitStarter.StarterOptions.parse(new String[] {"job"}));
+      () -> StarterOptions.parse(new String[] {"job"}));
     assertThrows(IllegalArgumentException.class,
-      () -> SparkSubmitStarter.StarterOptions.parse(new String[] {"--conf", "spark.properties"}));
+      () -> StarterOptions.parse(new String[] {"--conf", "spark.properties"}));
     assertThrows(IllegalArgumentException.class,
-      () -> SparkSubmitStarter.StarterOptions.parse(new String[] {"--spec"}));
+      () -> StarterOptions.parse(new String[] {"--spec"}));
     assertThrows(IllegalArgumentException.class,
-      () -> SparkSubmitStarter.StarterOptions.parse(
+      () -> StarterOptions.parse(
         new String[] {"--spec", "job", "--jars", "  "}));
     assertThrows(IllegalArgumentException.class,
-      () -> SparkSubmitStarter.StarterOptions.parse(
+      () -> StarterOptions.parse(
         new String[] {"--spec", "job", "--files", "  "}));
     assertThrows(IllegalArgumentException.class,
-      () -> SparkSubmitStarter.StarterOptions.parse(new String[] {
+      () -> StarterOptions.parse(new String[] {
         "--spec", "job", "--jars", "a.jar", "--jars", "b.jar"
       }));
   }

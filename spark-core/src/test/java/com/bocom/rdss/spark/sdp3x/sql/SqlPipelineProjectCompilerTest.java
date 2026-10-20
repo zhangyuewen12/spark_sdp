@@ -1,5 +1,7 @@
 package com.bocom.rdss.spark.sdp3x.sql;
 
+import com.bocom.rdss.spark.sdp3x.enums.ExecutionMode;
+
 import com.bocom.rdss.spark.sdp3x.api.DatasetDefinition;
 import com.bocom.rdss.spark.sdp3x.api.PipelineDefinition;
 import org.junit.jupiter.api.Test;
@@ -48,7 +50,7 @@ class SqlPipelineProjectCompilerTest {
       Collections.singleton("raw.orders"),
       first,
       1,
-      SqlPipelineDefinition.ExecutionMode.QUERY_RESULT,
+      ExecutionMode.QUERY_RESULT,
       Collections.singletonMap("spark.sql.shuffle.partitions", "4"))));
     when(parser.parse(second, 2)).thenReturn(Arrays.asList(
       new SqlPipelineDefinition(
@@ -58,7 +60,7 @@ class SqlPipelineProjectCompilerTest {
         Collections.singleton("raw.orders"),
         second,
         2,
-        SqlPipelineDefinition.ExecutionMode.QUERY_RESULT,
+        ExecutionMode.QUERY_RESULT,
         Collections.<String, String>emptyMap()),
       new SqlPipelineDefinition(
         "ads.daily_orders",
@@ -67,7 +69,7 @@ class SqlPipelineProjectCompilerTest {
         Collections.singleton("ods.order$detail"),
         second,
         3,
-        SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT,
+        ExecutionMode.SQL_STATEMENT,
         new LinkedHashMap<String, String>() {{
           put("spark.sql.shuffle.partitions", "2");
           put("spark.sql.autoBroadcastJoinThreshold", "-1");
@@ -132,6 +134,6 @@ class SqlPipelineProjectCompilerTest {
       SqlPipelineProjectException.class,
       () -> new SqlPipelineProjectCompiler(specLoader, parser).compile(tempDir));
 
-    assertTrue(exception.getMessage().contains("Failed to scan SQL library directory"));
+    assertTrue(exception.getMessage().contains("Failed to scan SQL transformation directory"));
   }
 }

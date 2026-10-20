@@ -1,5 +1,7 @@
 package com.bocom.rdss.spark.sdp3x.sql;
 
+import com.bocom.rdss.spark.sdp3x.enums.ExecutionMode;
+
 import com.bocom.rdss.spark.sdp3x.api.ImmutableDatasetDefinition;
 import com.bocom.rdss.spark.sdp3x.api.ImmutableFlowDefinition;
 import com.bocom.rdss.spark.sdp3x.api.PipelineBuilder;
@@ -97,13 +99,10 @@ class SqlPlanAndApplicationTest {
   void shouldRunApplicationWithExplicitAndDefaultMaster() throws Exception {
     Path explicitProject = createTemporaryViewProject("explicit-project");
     Path defaultProject = createTemporaryViewProject("default-project");
-    ByteArrayOutputStream out = new ByteArrayOutputStream();
-    PrintStream originalOut = System.out;
     String originalProperty = System.getProperty(SqlPipelineRunApplication.LOCAL_DEV_HIVE_ENABLED_PROPERTY);
 
     try {
       System.setProperty(SqlPipelineRunApplication.LOCAL_DEV_HIVE_ENABLED_PROPERTY, "false");
-      System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8.name()));
       SqlPipelineRunApplication.run(SqlPipelineRunOptions.parse(new String[] {
         "run", "--spec", explicitProject.resolve("spark-pipeline.yaml").toString(), "--master", "local[1]"
       }));
@@ -112,11 +111,7 @@ class SqlPlanAndApplicationTest {
       }));
     } finally {
       restoreProperty(SqlPipelineRunApplication.LOCAL_DEV_HIVE_ENABLED_PROPERTY, originalProperty);
-      System.setOut(originalOut);
     }
-
-    String stdout = new String(out.toByteArray(), StandardCharsets.UTF_8);
-    assertTrue(stdout.contains("Executed 1 flow(s) for pipeline 'temp_view_pipeline'."));
   }
 
   @Test
@@ -172,7 +167,7 @@ class SqlPlanAndApplicationTest {
       Collections.singleton("source"),
       Paths.get("/tmp/project/sql/001.sql"),
       9,
-      SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT,
+      ExecutionMode.SQL_STATEMENT,
       Collections.singletonMap("spark.sql.shuffle.partitions", "2"));
     SqlPipelineProjectException exception = new SqlPipelineProjectException("bad", new RuntimeException("cause"));
 
@@ -185,7 +180,7 @@ class SqlPlanAndApplicationTest {
     assertEquals("dataset", definition.datasetName());
     assertEquals("SELECT 1", definition.querySql());
     assertEquals(9, definition.statementIndex());
-    assertEquals(SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT, definition.executionMode());
+    assertEquals(ExecutionMode.SQL_STATEMENT, definition.executionMode());
     assertEquals("2", definition.sparkConf().get("spark.sql.shuffle.partitions"));
     assertEquals("bad", exception.getMessage());
     assertEquals("cause", exception.getCause().getMessage());

@@ -5,20 +5,27 @@ import java.nio.file.Paths;
 
 final class SqlPipelineRunOptions {
   private final Path projectPath;
+  private final Path taskFilePath;
   private final String master;
   private final boolean submittedViaSparkSubmit;
 
   private SqlPipelineRunOptions(
       Path projectPath,
+      Path taskFilePath,
       String master,
       boolean submittedViaSparkSubmit) {
     this.projectPath = projectPath;
+    this.taskFilePath = taskFilePath;
     this.master = master;
     this.submittedViaSparkSubmit = submittedViaSparkSubmit;
   }
 
   Path projectPath() {
     return projectPath;
+  }
+
+  Path taskFilePath() {
+    return taskFilePath;
   }
 
   String master() {
@@ -32,6 +39,7 @@ final class SqlPipelineRunOptions {
   static SqlPipelineRunOptions parse(String[] args) {
     int index = 0;
     Path specPath = null;
+    Path taskFilePath = null;
     String master = null;
     boolean submittedViaSparkSubmit = false;
 
@@ -41,7 +49,19 @@ final class SqlPipelineRunOptions {
         if (index + 1 >= args.length) {
           throw new IllegalArgumentException("Missing value for --spec.");
         }
+        if (specPath != null) {
+          throw new IllegalArgumentException("Option --spec may only be specified once.");
+        }
         specPath = Paths.get(args[index + 1]);
+        index += 2;
+      } else if ("--task-file".equals(arg)) {
+        if (index + 1 >= args.length) {
+          throw new IllegalArgumentException("Missing value for --task-file.");
+        }
+        if (taskFilePath != null) {
+          throw new IllegalArgumentException("Option --task-file may only be specified once.");
+        }
+        taskFilePath = Paths.get(args[index + 1]);
         index += 2;
       } else if ("--master".equals(arg)) {
         if (index + 1 >= args.length) {
@@ -61,6 +81,6 @@ final class SqlPipelineRunOptions {
       throw new IllegalArgumentException("Missing required --spec <job-directory-or-spec-file>.");
     }
 
-    return new SqlPipelineRunOptions(specPath, master, submittedViaSparkSubmit);
+    return new SqlPipelineRunOptions(specPath, taskFilePath, master, submittedViaSparkSubmit);
   }
 }

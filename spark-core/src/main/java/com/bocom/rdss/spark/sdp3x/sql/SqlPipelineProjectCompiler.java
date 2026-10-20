@@ -1,5 +1,7 @@
 package com.bocom.rdss.spark.sdp3x.sql;
 
+import com.bocom.rdss.spark.sdp3x.enums.ExecutionMode;
+import com.bocom.rdss.spark.sdp3x.enums.JobType;
 import com.bocom.rdss.spark.sdp3x.api.DatasetDefinition;
 import com.bocom.rdss.spark.sdp3x.api.ImmutableDatasetDefinition;
 import com.bocom.rdss.spark.sdp3x.api.ImmutableFlowDefinition;
@@ -7,17 +9,10 @@ import com.bocom.rdss.spark.sdp3x.api.PipelineBuilder;
 import com.bocom.rdss.spark.sdp3x.api.PipelineDefinition;
 import com.bocom.rdss.spark.sdp3x.api.DatasetKind;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Compiles one SQL pipeline project into the existing Java pipeline model.
@@ -38,7 +33,13 @@ public final class SqlPipelineProjectCompiler {
   }
 
   public PipelineDefinition compile(Path projectRoot) {
-    SqlPipelineProjectSpec spec = specLoader.load(projectRoot);
+    return compile(specLoader.load(projectRoot));
+  }
+
+  public PipelineDefinition compile(SqlPipelineProjectSpec spec) {
+    if (spec.jobType() != JobType.SPARK_SQL) {
+      throw new SqlPipelineProjectException("SQL compiler cannot compile job-type " + spec.jobType());
+    }
     PipelineBuilder pipelineBuilder = new PipelineBuilder(spec.name());
     if (spec.catalog() != null) {
       pipelineBuilder.catalog(spec.catalog());
@@ -48,7 +49,7 @@ public final class SqlPipelineProjectCompiler {
     }
     spec.configuration().forEach(pipelineBuilder::configuration);
 
-    List<Path> sqlFiles = discoverSqlFiles(spec.sqlDirectories());
+    List<Path> sqlFiles = spec.sqlFiles();
     if (sqlFiles.isEmpty()) {
       throw new SqlPipelineProjectException(
         "No SQL files were found in project: " + spec.rootDirectory());
@@ -101,7 +102,7 @@ public final class SqlPipelineProjectCompiler {
       .withProperty(SqlPipelineDatasetProperties.STATEMENT_INDEX, String.valueOf(definition.statementIndex()))
       .withProperty(
         SqlPipelineDatasetProperties.EXECUTION_MODE,
-        definition.executionMode() == SqlPipelineDefinition.ExecutionMode.SQL_STATEMENT
+        definition.executionMode() == ExecutionMode.SQL_STATEMENT
           ? SqlPipelineDatasetProperties.EXECUTION_MODE_SQL_STATEMENT
           : SqlPipelineDatasetProperties.EXECUTION_MODE_QUERY_RESULT);
   }
@@ -115,21 +116,4 @@ public final class SqlPipelineProjectCompiler {
     return text.replaceAll("[^A-Za-z0-9_.-]", "_");
   }
 
-  private List<Path> discoverSqlFiles(List<Path> sqlDirectories) {
-    Set<Path> uniqueFiles = new LinkedHashSet<>();
-    for (Path sqlDirectory : sqlDirectories) {
-      try (Stream<Path> stream = Files.walk(sqlDirectory)) {
-        List<Path> discovered = stream
-          .filter(Files::isRegularFile)
-          .filter(path -> path.getFileName().toString().toLowerCase().endsWith(".sql"))
-          .sorted(Comparator.comparing(Path::toString))
-          .collect(Collectors.toList());
-        uniqueFiles.addAll(discovered);
-      } catch (IOException e) {
-        throw new SqlPipelineProjectException(
-          "Failed to scan SQL library directory: " + sqlDirectory, e);
-      }
-    }
-    return new ArrayList<>(uniqueFiles);
-  }
 }
