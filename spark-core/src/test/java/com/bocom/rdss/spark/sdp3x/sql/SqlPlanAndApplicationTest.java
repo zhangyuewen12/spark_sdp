@@ -76,7 +76,8 @@ class SqlPlanAndApplicationTest {
 
     try {
       System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8.name()));
-      SqlPipelinePlanSupport.print(SqlPipelinePlanSupport.plan(projectRoot));
+      SqlPipelinePlanSupport.print(SqlPipelinePlanSupport.plan(
+        projectRoot.resolve("spark-pipeline.yaml")));
     } finally {
       System.setOut(originalOut);
     }
@@ -92,7 +93,7 @@ class SqlPlanAndApplicationTest {
       SqlPipelineProjectException.class,
       () -> SqlPipelineRunApplication.main(new String[] {"--spec", tempMissingPath()}));
 
-    assertTrue(exception.getMessage().contains("does not exist"));
+    assertTrue(exception.getMessage().contains("readable YAML file"));
   }
 
   @Test

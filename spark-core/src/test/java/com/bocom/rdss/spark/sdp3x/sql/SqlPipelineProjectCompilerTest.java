@@ -1,6 +1,7 @@
 package com.bocom.rdss.spark.sdp3x.sql;
 
 import com.bocom.rdss.spark.sdp3x.enums.ExecutionMode;
+import com.bocom.rdss.spark.sdp3x.enums.JobType;
 
 import com.bocom.rdss.spark.sdp3x.api.DatasetDefinition;
 import com.bocom.rdss.spark.sdp3x.api.PipelineDefinition;
@@ -122,5 +123,46 @@ class SqlPipelineProjectCompilerTest {
       () -> new SqlPipelineProjectCompiler(specLoader, parser).compile(tempDir));
 
     assertTrue(exception.getMessage().contains("Failed to scan SQL transformation directory"));
+  }
+
+  @Test
+  void shouldRejectCompactionJobBeforeScanningSqlFiles() {
+    SqlPipelineProjectSpec spec = new SqlPipelineProjectSpec(
+      tempDir,
+      "compaction",
+      null,
+      null,
+      Collections.emptyMap(),
+      Collections.emptyList(),
+      JobType.HUDI_COMPACTION,
+      Collections.singletonList("db.orders"));
+
+    SqlPipelineProjectException exception = assertThrows(
+      SqlPipelineProjectException.class,
+      () -> new SqlPipelineProjectCompiler(specLoader, parser).compile(spec));
+
+    assertTrue(exception.getMessage().contains("HUDI_COMPACTION"));
+  }
+
+  @Test
+  void shouldRejectUnsupportedDatasetKind() throws IOException {
+    Path sqlDir = Files.createDirectory(tempDir.resolve("transformations"));
+    Path sqlFile = Files.write(sqlDir.resolve("001_invalid.sql"), "ignored".getBytes());
+    SqlPipelineProjectSpec spec = new SqlPipelineProjectSpec(
+      tempDir,
+      "invalid-dataset",
+      null,
+      null,
+      Collections.emptyMap(),
+      Collections.singletonList(sqlDir));
+    when(parser.parse(sqlFile, 1)).thenReturn(Collections.singletonList(
+      new SqlPipelineDefinition("invalid", null, "SELECT 1", Collections.emptySet(),
+        sqlFile, 1, ExecutionMode.QUERY_RESULT)));
+
+    SqlPipelineProjectException exception = assertThrows(
+      SqlPipelineProjectException.class,
+      () -> new SqlPipelineProjectCompiler(specLoader, parser).compile(spec));
+
+    assertTrue(exception.getMessage().contains("Unsupported SQL dataset kind"));
   }
 }

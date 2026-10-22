@@ -42,7 +42,8 @@ class SparkSubmitStarterTest {
     Path jar = Files.createFile(tempDir.resolve("spark-sdp.jar"));
 
     List<String> command = SparkSubmitStarter.buildCommand(
-      StarterOptions.parse(new String[] {"--spec", jobDirectory.toString()}), jar);
+      StarterOptions.parse(new String[] {"--spec", jobDirectory.resolve("spark-pipeline.yaml").toString(),
+        "--jobPath", jobDirectory.toString()}), jar);
 
     assertOption(command, "--master", "yarn");
     assertOption(command, "--deploy-mode", "cluster");
@@ -75,7 +76,8 @@ class SparkSubmitStarterTest {
 
     List<String> command = SparkSubmitStarter.buildCommand(
       StarterOptions.parse(new String[] {
-        "--conf", properties.toString(), "--spec", jobDirectory.toString()
+        "--conf", properties.toString(), "--spec", jobDirectory.resolve("spark-pipeline.yaml").toString(),
+        "--jobPath", jobDirectory.toString()
       }), jar);
 
     assertOption(command, "--conf", "spark.sql.catalog=yaml_catalog");
@@ -97,7 +99,9 @@ class SparkSubmitStarterTest {
     IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
       () -> SparkSubmitStarter.buildCommand(
         StarterOptions.parse(new String[] {
-          "--spec", jobDirectory.toString(), "--conf", tempDir.resolve("missing.properties").toString()
+          "--spec", jobDirectory.resolve("spark-pipeline.yaml").toString(),
+          "--jobPath", jobDirectory.toString(),
+          "--conf", tempDir.resolve("missing.properties").toString()
         }), jar));
 
     assertTrue(error.getMessage().startsWith("Spark properties file does not exist:"));
@@ -114,7 +118,8 @@ class SparkSubmitStarterTest {
 
     List<String> command = SparkSubmitStarter.buildCommand(
       StarterOptions.parse(new String[] {
-        "--spec", jobDirectory.toString(),
+        "--spec", jobDirectory.resolve("spark-pipeline.yaml").toString(),
+        "--jobPath", jobDirectory.toString(),
         "--jars", "/opt/jars/mysql.jar,/opt/jars/catalog.jar"
       }), jar);
 
@@ -134,7 +139,8 @@ class SparkSubmitStarterTest {
 
     List<String> command = SparkSubmitStarter.buildCommand(
       StarterOptions.parse(new String[] {
-        "--spec", jobDirectory.toString(),
+        "--spec", jobDirectory.resolve("spark-pipeline.yaml").toString(),
+        "--jobPath", jobDirectory.toString(),
         "--files", "/etc/hive/conf/hive-site.xml"
       }), jar);
 

@@ -42,13 +42,13 @@ class SqlPipelineProjectRunnerTest {
       SqlPipelineProjectRunnerTest.class.getResource("/sql-batch-pipeline").toURI());
 
     SqlPipelineProjectRunner runner = new SqlPipelineProjectRunner();
-    PipelineDefinition pipelineDefinition = runner.compile(projectRoot);
+    PipelineDefinition pipelineDefinition = runner.compile(projectRoot.resolve("spark-pipeline.yaml"));
     assertEquals("sql_orders_pipeline", pipelineDefinition.name());
     assertEquals(3, pipelineDefinition.datasets().size());
     assertEquals(3, pipelineDefinition.flows().size());
 
     ExecutionReport report = runner.run(
-      projectRoot,
+      projectRoot.resolve("spark-pipeline.yaml"),
       spark,
       ExecutionOptions.defaults().withMaterializedViewSaveMode(SaveMode.Overwrite));
     assertEquals(3, report.results().size());
@@ -83,12 +83,12 @@ class SqlPipelineProjectRunnerTest {
       "region STRING, order_date DATE, order_count BIGINT, total_amount DOUBLE) USING PARQUET");
 
     SqlPipelineProjectRunner runner = new SqlPipelineProjectRunner();
-    PipelineDefinition pipelineDefinition = runner.compile(projectRoot);
+    PipelineDefinition pipelineDefinition = runner.compile(projectRoot.resolve("spark-pipeline.yaml"));
     assertEquals(1, pipelineDefinition.datasets().size());
     assertEquals(1, pipelineDefinition.flows().size());
 
     ExecutionReport report = runner.run(
-      projectRoot,
+      projectRoot.resolve("spark-pipeline.yaml"),
       spark,
       ExecutionOptions.defaults().withMaterializedViewSaveMode(SaveMode.Overwrite));
     assertEquals(1, report.results().size());
@@ -106,9 +106,9 @@ class SqlPipelineProjectRunnerTest {
   @Test
   void shouldParseRunCliCommand() {
     SqlPipelineRunOptions cliOptions = SqlPipelineRunOptions.parse(
-      new String[] {"--spec", "examples/sql-batch-pipeline", "--master", "local[2]"});
+      new String[] {"--spec", "examples/sql-batch-pipeline/spark-pipeline.yaml", "--master", "local[2]"});
 
-    assertEquals(Paths.get("examples/sql-batch-pipeline"), cliOptions.projectPath());
+    assertEquals(Paths.get("examples/sql-batch-pipeline/spark-pipeline.yaml"), cliOptions.projectPath());
     assertEquals("local[2]", cliOptions.master());
   }
 
@@ -135,23 +135,23 @@ class SqlPipelineProjectRunnerTest {
   }
 
   @Test
-  void shouldFailWhenSpecIsMissingInSpecifiedDirectory() throws IOException {
+  void shouldFailWhenSpecFileIsMissing() throws IOException {
     Path tempDir = Files.createTempDirectory("sql-pipeline-project-spec-loader");
 
     SqlPipelineProjectException exception = assertThrows(
       SqlPipelineProjectException.class,
-      () -> new SqlPipelineProjectSpecLoader().load(tempDir));
+      () -> new SqlPipelineProjectSpecLoader().load(tempDir.resolve("spark-pipeline.yaml")));
 
-    assertTrue(exception.getMessage().contains("Missing spark-pipeline.yaml under"));
+    assertTrue(exception.getMessage().contains("readable YAML file"));
   }
 
   @Test
-  void shouldLoadSpecFromSpecifiedDirectory() throws URISyntaxException {
+  void shouldLoadSpecFromSpecifiedFile() throws URISyntaxException {
     Path projectRoot = Paths.get(
       SqlPipelineProjectRunnerTest.class.getResource("/sql-batch-pipeline").toURI());
 
     SqlPipelineProjectSpec spec = new SqlPipelineProjectSpecLoader()
-      .load(projectRoot);
+      .load(projectRoot.resolve("spark-pipeline.yaml"));
 
     assertEquals(projectRoot.toAbsolutePath().normalize(), spec.rootDirectory());
   }

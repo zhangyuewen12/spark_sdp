@@ -45,7 +45,7 @@ public final class SqlPipelineRunApplication {
 
   public static void run(SqlPipelineRunOptions cliOptions) {
     SqlPipelineProjectSpec jobSpec = new SqlPipelineProjectSpecLoader()
-      .load(cliOptions.projectPath(), cliOptions.taskFilePath());
+      .load(cliOptions.projectPath(), cliOptions.jobPath(), cliOptions.taskFilePath());
     PipelineDefinition pipelineDefinition = jobSpec.jobType() == JobType.SPARK_SQL
       ? new SqlPipelineProjectRunner().compile(jobSpec) : null;
     String applicationName = pipelineDefinition == null ? jobSpec.name() : pipelineDefinition.name();

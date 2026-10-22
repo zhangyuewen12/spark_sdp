@@ -22,7 +22,7 @@ import java.util.Properties;
 import java.util.function.Supplier;
 
 /**
- * Submission entrypoint (entrypoint A). It packages a job directory or a spec plus one task file,
+ * Submission entrypoint (entrypoint A). It packages a spec with either a job directory or a task file,
  * then starts entrypoint B through {@code spark-submit} in Yarn cluster mode.
  */
 public final class SparkSubmitStarter {
@@ -81,13 +81,16 @@ public final class SparkSubmitStarter {
   static List<String> buildCommand(StarterOptions options, Path applicationJar) {
     Path taskFile = options.taskFilePath == null ? null : resolveTaskFile(options.taskFilePath);
     Path specPath = resolveSpec(options.specPath);
-    Path jobDirectory = specPath.getParent();
+    Path jobDirectory = taskFile == null
+      ? resolveJobDirectory(options.jobPath == null ? specPath.getParent() : options.jobPath)
+      : null;
     Map<String, String> configuration = loadConfiguration(specPath);
     if ("hudi-compaction".equals(configuration.get("job-type")) && taskFile == null) {
-      throw new IllegalArgumentException("Hudi compaction job requires --task-file <tables.list>");
+      throw new IllegalArgumentException(
+        "Hudi compaction job requires --task-file/--taskFile <tables.list>");
     }
     Map<String, String> commonSparkConfiguration =
-      loadCommonSparkConfiguration(options.confPath);
+      loadCommonSparkConfiguration(options.propsPath);
     Path jobArchive = createJobArchive(jobDirectory, specPath, taskFile);
 
     List<String> command = new ArrayList<>();
@@ -100,10 +103,14 @@ public final class SparkSubmitStarter {
     command.add(APPLICATION_CLASS);
     command.add(applicationJar.toAbsolutePath().normalize().toString());
     command.add("--submitted");
+    if (jobDirectory != null) {
+      command.add("--jobPath");
+      command.add(DISTRIBUTED_JOB_DIRECTORY);
+    }
     command.add("--spec");
     command.add(DISTRIBUTED_JOB_DIRECTORY + "/" + specPath.getFileName());
     if (taskFile != null) {
-      command.add("--task-file");
+      command.add(options.taskFileOption);
       command.add(DISTRIBUTED_JOB_DIRECTORY + "/task/" + taskFile.getFileName());
     }
     return Collections.unmodifiableList(command);
@@ -179,27 +186,28 @@ public final class SparkSubmitStarter {
 
   private static Path resolveSpec(Path requestedPath) {
     Path path = requestedPath.toAbsolutePath().normalize();
-    if (Files.isRegularFile(path)) {
-      String fileName = path.getFileName().toString();
-      if (!fileName.endsWith(".yaml") && !fileName.endsWith(".yml")) {
-        throw new IllegalArgumentException("Job spec must be a YAML file: " + path);
-      }
-      return path;
+    if (!Files.isRegularFile(path) || !Files.isReadable(path)) {
+      throw new IllegalArgumentException("--spec must be a readable YAML file: " + path);
     }
-    if (!Files.isDirectory(path)) {
-      throw new IllegalArgumentException("Job path does not exist: " + path);
+    String fileName = path.getFileName().toString();
+    if (!fileName.endsWith(".yaml") && !fileName.endsWith(".yml")) {
+      throw new IllegalArgumentException("--spec must be a YAML file: " + path);
     }
-    Path specPath = path.resolve("spark-pipeline.yaml");
-    if (!Files.isRegularFile(specPath)) {
-      throw new IllegalArgumentException("Job directory must contain spark-pipeline.yaml: " + path);
-    }
-    return specPath;
+    return path;
   }
 
   private static Path resolveTaskFile(Path requestedPath) {
     Path path = requestedPath.toAbsolutePath().normalize();
     if (!Files.isRegularFile(path) || !Files.isReadable(path)) {
-      throw new IllegalArgumentException("--task-file must be a readable file: " + path);
+      throw new IllegalArgumentException("--taskFile must be a readable file: " + path);
+    }
+    return path;
+  }
+
+  private static Path resolveJobDirectory(Path requestedPath) {
+    Path path = requestedPath.toAbsolutePath().normalize();
+    if (!Files.isDirectory(path) || !Files.isReadable(path)) {
+      throw new IllegalArgumentException("--jobPath must be a readable directory: " + path);
     }
     return path;
   }
@@ -258,18 +266,27 @@ public final class SparkSubmitStarter {
   }
 
   private static Path createJobArchive(Path jobDirectory, Path specPath, Path taskFile) {
+    if (jobDirectory == null && taskFile == null) {
+      throw new IllegalArgumentException("Either jobDirectory or taskFile is required.");
+    }
+    if (jobDirectory != null && taskFile != null) {
+      throw new IllegalArgumentException("jobDirectory and taskFile cannot be used together.");
+    }
     try {
       Path archive = Files.createTempFile("spark-sdp-job-", ".zip");
       Files.deleteIfExists(archive);
       Map<String, String> environment = Collections.singletonMap("create", "true");
       try (FileSystem zip = FileSystems.newFileSystem(
           java.net.URI.create("jar:" + archive.toUri()), environment)) {
+        copyToArchive(specPath, zip.getPath("/" + specPath.getFileName()));
         if (taskFile != null) {
-          copyToArchive(specPath, zip.getPath("/" + specPath.getFileName()));
           copyToArchive(taskFile, zip.getPath("/task/" + taskFile.getFileName()));
         } else {
           try (java.util.stream.Stream<Path> paths = Files.walk(jobDirectory)) {
             paths.filter(Files::isRegularFile)
+              .filter(source -> !source.equals(specPath))
+              .filter(source -> !jobDirectory.relativize(source)
+                .equals(specPath.getFileName()))
               .filter(source -> shouldArchive(jobDirectory.relativize(source)))
               .forEach(source -> copyToArchive(
                 source, zip.getPath("/" + jobDirectory.relativize(source).toString())));
@@ -280,7 +297,7 @@ public final class SparkSubmitStarter {
       return archive;
     } catch (IOException | UncheckedIOException e) {
       Throwable cause = e instanceof UncheckedIOException ? e.getCause() : e;
-      throw new IllegalStateException("Failed to archive job directory: " + jobDirectory, cause);
+      throw new IllegalStateException("Failed to archive job input for: " + specPath, cause);
     }
   }
 
@@ -347,8 +364,8 @@ public final class SparkSubmitStarter {
   private static void printUsage() {
     System.out.println("Usage:");
     System.out.println("  java -cp spark-sdp-1.0.jar " + SparkSubmitStarter.class.getName()
-      + " --spec <job-directory-or-spec-file> [--conf <spark-properties-file>]"
-      + " [--task-file <job-input-file>]"
+      + " --spec <job.yaml> (--jobPath <job-directory> | --taskFile <job-input-file>)"
+      + " [--props <spark-properties-file>]"
       + " [--files <file1,file2,...>]"
       + " [--jars <jar1,jar2,...>]");
     System.out.println();

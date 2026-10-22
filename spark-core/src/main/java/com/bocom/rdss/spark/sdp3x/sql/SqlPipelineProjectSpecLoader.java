@@ -22,21 +22,25 @@ import java.util.Set;
  * Loads a SQL pipeline project spec from {@code spark-pipeline.yaml}.
  */
 public final class SqlPipelineProjectSpecLoader {
-  private static final String SPEC_FILE = "spark-pipeline.yaml";
-
-  public SqlPipelineProjectSpec load(Path projectRootOrSpecPath) {
-    return load(projectRootOrSpecPath, null);
+  public SqlPipelineProjectSpec load(Path specFile) {
+    return load(specFile, null);
   }
 
-  public SqlPipelineProjectSpec load(Path projectRootOrSpecPath, Path taskFile) {
-    Path specPath = resolveSpecPath(projectRootOrSpecPath);
-    Path normalizedRoot = specPath.getParent().toAbsolutePath().normalize();
+  public SqlPipelineProjectSpec load(Path specFile, Path taskFile) {
+    return load(specFile, null, taskFile);
+  }
+
+  public SqlPipelineProjectSpec load(Path specFile, Path jobPath, Path taskFile) {
+    if (jobPath != null && taskFile != null) {
+      throw new SqlPipelineProjectException("--jobPath and --taskFile cannot be used together");
+    }
+    Path specPath = resolveSpecPath(specFile);
+    Path projectRoot = jobPath == null
+      ? specPath.getParent()
+      : validateJobPath(jobPath);
 
     Map<String, Object> rawSpec = readYaml(specPath);
-    if (rawSpec.containsKey("libraries")) {
-      throw new SqlPipelineProjectException("'libraries' is no longer supported; use 'transformation'");
-    }
-    String name = stringValue(rawSpec.get("name"), normalizedRoot.getFileName().toString());
+    String name = stringValue(rawSpec.get("name"), projectRoot.getFileName().toString());
     JobType jobType = readJobType(rawSpec);
     Path normalizedTaskFile = taskFile == null ? null : validateTaskFile(taskFile);
     SqlFileSource sqlFileSource = SqlFileSource.none();
@@ -49,14 +53,14 @@ public final class SqlPipelineProjectSpecLoader {
         sqlFileSource = SqlFileSource.fromSqlFile(normalizedTaskFile);
       } else {
         sqlFileSource = SqlFileSource.fromSqlDirectories(
-          readSqlDirectories(normalizedRoot, rawSpec.get("transformation")));
+          readSqlDirectories(projectRoot, rawSpec.get("transformation")));
       }
     }
     List<String> compactionTables = jobType == JobType.HUDI_COMPACTION
       ? readCompactionTables(normalizedTaskFile)
       : Collections.emptyList();
     return new SqlPipelineProjectSpec(
-      normalizedRoot,
+      projectRoot,
       name,
       nullableStringValue(rawSpec.get("catalog")),
       nullableStringValue(rawSpec.get("database")),
@@ -66,40 +70,32 @@ public final class SqlPipelineProjectSpecLoader {
       compactionTables);
   }
 
-  private Path resolveSpecPath(Path projectRootOrSpecPath) {
-    Path normalizedPath = projectRootOrSpecPath.toAbsolutePath().normalize();
-    if (Files.isRegularFile(normalizedPath)) {
-      String fileName = normalizedPath.getFileName().toString();
-      if (!fileName.endsWith(".yaml") && !fileName.endsWith(".yml")) {
-        throw new SqlPipelineProjectException("SQL pipeline spec must be a YAML file: " + normalizedPath);
-      }
-      return normalizedPath;
+  private Path resolveSpecPath(Path requestedPath) {
+    Path path = requestedPath.toAbsolutePath().normalize();
+    if (!Files.isRegularFile(path) || !Files.isReadable(path)) {
+      throw new SqlPipelineProjectException("SQL pipeline spec must be a readable YAML file: " + path);
     }
-
-    if (!Files.isDirectory(normalizedPath)) {
-      throw new SqlPipelineProjectException("SQL pipeline path does not exist: " + normalizedPath);
+    String fileName = path.getFileName().toString();
+    if (!fileName.endsWith(".yaml") && !fileName.endsWith(".yml")) {
+      throw new SqlPipelineProjectException("SQL pipeline spec must be a YAML file: " + path);
     }
-
-    // Only inspect the directory explicitly provided by the caller. We intentionally
-    // do not walk up parent directories.
-    return findSpecInDirectory(normalizedPath);
+    return path;
   }
 
   private Path validateTaskFile(Path taskFile) {
     Path normalized = taskFile.toAbsolutePath().normalize();
     if (!Files.isRegularFile(normalized) || !Files.isReadable(normalized)) {
-      throw new SqlPipelineProjectException("--task-file must be a readable file: " + normalized);
+      throw new SqlPipelineProjectException("--taskFile must be a readable file: " + normalized);
     }
     return normalized;
   }
 
-  private Path findSpecInDirectory(Path directory) {
-    Path specPath = directory.resolve(SPEC_FILE);
-    if (Files.isRegularFile(specPath)) {
-      return specPath;
+  private Path validateJobPath(Path jobPath) {
+    Path normalized = jobPath.toAbsolutePath().normalize();
+    if (!Files.isDirectory(normalized) || !Files.isReadable(normalized)) {
+      throw new SqlPipelineProjectException("--jobPath must be a readable directory: " + normalized);
     }
-    throw new SqlPipelineProjectException(
-      "Missing " + SPEC_FILE + " under: " + directory);
+    return normalized;
   }
 
   private JobType readJobType(Map<String, Object> rawSpec) {
@@ -116,7 +112,7 @@ public final class SqlPipelineProjectSpecLoader {
 
   private List<String> readCompactionTables(Path listFile) {
     if (listFile == null) {
-      throw new SqlPipelineProjectException("Hudi compaction job requires --task-file <tables.list>");
+      throw new SqlPipelineProjectException("Hudi compaction job requires --taskFile <tables.list>");
     }
     if (!listFile.getFileName().toString().endsWith(".list")) {
       throw new SqlPipelineProjectException("Hudi compaction task file must end with .list: " + listFile);

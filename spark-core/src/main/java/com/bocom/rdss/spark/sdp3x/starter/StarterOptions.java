@@ -6,17 +6,22 @@ import java.nio.file.Paths;
 /** Parsed command-line options for the Spark submit entrypoint. */
 final class StarterOptions {
   final Path specPath;
+  final Path jobPath;
   final Path taskFilePath;
-  final Path confPath;
+  final String taskFileOption;
+  final Path propsPath;
   final String files;
   final String jars;
   final boolean help;
 
-  private StarterOptions(Path specPath, Path taskFilePath, Path confPath,
+  private StarterOptions(Path specPath, Path jobPath, Path taskFilePath, String taskFileOption,
+      Path propsPath,
       String files, String jars, boolean help) {
     this.specPath = specPath;
+    this.jobPath = jobPath;
     this.taskFilePath = taskFilePath;
-    this.confPath = confPath;
+    this.taskFileOption = taskFileOption;
+    this.propsPath = propsPath;
     this.files = files;
     this.jars = jars;
     this.help = help;
@@ -24,11 +29,13 @@ final class StarterOptions {
 
   static StarterOptions parse(String[] args) {
     if (args.length == 1 && ("--help".equals(args[0]) || "-h".equals(args[0]))) {
-      return new StarterOptions(null, null, null, null, null, true);
+      return new StarterOptions(null, null, null, null, null, null, null, true);
     }
     Path specPath = null;
+    Path jobPath = null;
     Path taskFilePath = null;
-    Path confPath = null;
+    String taskFileOption = null;
+    Path propsPath = null;
     String files = null;
     String jars = null;
     for (int index = 0; index < args.length; index += 2) {
@@ -40,16 +47,23 @@ final class StarterOptions {
           throw new IllegalArgumentException("Option --spec may only be specified once.");
         }
         specPath = Paths.get(args[index + 1]);
-      } else if ("--task-file".equals(args[index])) {
+      } else if ("--job-path".equals(args[index])) {
+        if (jobPath != null) {
+          throw new IllegalArgumentException("Option --jobPath may only be specified once.");
+        }
+        jobPath = Paths.get(args[index + 1]);
+      } else if ("--task-file".equals(args[index]) || "--task-file".equals(args[index])) {
         if (taskFilePath != null) {
-          throw new IllegalArgumentException("Option --task-file may only be specified once.");
+          throw new IllegalArgumentException("Option --taskFile may only be specified once.");
         }
         taskFilePath = Paths.get(args[index + 1]);
-      } else if ("--conf".equals(args[index])) {
-        if (confPath != null) {
-          throw new IllegalArgumentException("Option --conf may only be specified once.");
+        taskFileOption = args[index];
+      } else if ("--props".equals(args[index]) || "--propsPath".equals(args[index])
+          || "--conf".equals(args[index])) {
+        if (propsPath != null) {
+          throw new IllegalArgumentException("Option --props may only be specified once.");
         }
-        confPath = Paths.get(args[index + 1]);
+        propsPath = Paths.get(args[index + 1]);
       } else if ("--files".equals(args[index])) {
         if (files != null) {
           throw new IllegalArgumentException("Option --files may only be specified once.");
@@ -73,6 +87,10 @@ final class StarterOptions {
     if (specPath == null) {
       throw new IllegalArgumentException("Required option is missing: --spec");
     }
-    return new StarterOptions(specPath, taskFilePath, confPath, files, jars, false);
+    if (jobPath != null && taskFilePath != null) {
+      throw new IllegalArgumentException("--jobPath and --taskFile cannot be used together.");
+    }
+    return new StarterOptions(specPath, jobPath, taskFilePath, taskFileOption,
+      propsPath, files, jars, false);
   }
 }
