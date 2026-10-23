@@ -9,7 +9,7 @@
 - `CREATE MATERIALIZED VIEW ... AS SELECT ...`
 - `CREATE TEMPORARY VIEW ... AS SELECT ...`
 - `INSERT INTO [TABLE] target SELECT ...`
-- `SET key=value;` 为下一条 SQL flow 设置局部 Spark 参数
+- Spark 参数统一在 `spark-pipeline.yaml` 中配置；SQL 文件中的 `SET` 语句会被忽略
 - 生产提交与 IDEA 本地运行
 - 本地 Spark 批处理运行
 - 基于 `SPARK_HOME` 的 `spark-submit` 提交入口
@@ -64,15 +64,15 @@ examples/sql-hive-insert-pipeline/
 name: sql_orders_pipeline
 configuration:
   spark.sql.shuffle.partitions: "1"
-libraries:
-  - transformations
+transformation: transformations
 ```
 
 字段说明：
 
 - `name`：pipeline 名称
-- `configuration`：传递给 SparkSession 的配置项
-- `libraries`：SQL 文件目录列表，支持一个或多个目录
+- `configuration`：整个作业使用的 SparkSession 配置项，例如 `spark.sql.shuffle.partitions`
+- `spark-submit`：提交资源与运行环境配置，例如 `executor.memory`、`executor.cores`、`queue`
+- `transformation`：SQL 文件目录；未配置时默认使用 `transformations`
 
 当前 MVP 里最常用的就是这几个字段。
 
@@ -176,27 +176,23 @@ GROUP BY region, TO_DATE(orderDate);
 - 这种写法适合写入 Hive 中已经建好的明细表、汇总表或分区表
 - 上游依赖仍然会从 `FROM` / `JOIN` 中自动提取
 
-### 3.5 为单个 flow 设置 Spark 参数
+### 3.5 配置 Spark 参数
 
-如果你只想让某一条 SQL flow 使用特殊的 Spark 参数，可以在它前面写一个或多个
-`SET key=value;`：
+SQL 文件只需编写业务 SQL。将整个作业需要的 Spark SQL 参数写在
+`spark-pipeline.yaml` 的 `configuration` 中，将资源、队列等提交参数写在
+`spark-submit` 中：
 
-```sql
-SET spark.sql.shuffle.partitions=8;
-SET spark.sql.autoBroadcastJoinThreshold=-1;
-CREATE MATERIALIZED VIEW orders_clean AS
-SELECT *
-FROM orders_source
-WHERE amount > 0;
+```yaml
+configuration:
+  spark.sql.shuffle.partitions: "8"
+  spark.sql.autoBroadcastJoinThreshold: "-1"
+spark-submit:
+  executor.memory: 4g
+  executor.cores: 2
+  queue: default
 ```
 
-规则说明：
-
-- `spark-pipeline.yaml` 里的 `configuration` 仍然是整条 pipeline 的默认配置
-- `SET key=value;` 只作用于它后面的那一条 `CREATE ... AS SELECT ...` 或 `INSERT INTO ... SELECT ...`
-- 多个连续的 `SET` 会叠加到同一个 flow
-- 该 flow 执行完成后，这些局部配置会自动恢复，不会污染后续 flow
-- 单独写 `SET` 而后面没有实际 SQL flow 会报错
+已有 SQL 文件中的 `SET` 语句会被跳过，不会报错，也不会改变当前或后续 SQL 的配置。
 
 ## 4. 开发步骤
 
@@ -241,7 +237,7 @@ WHERE amount > 0;
 
 ```java
 SqlPipelinePlanSupport.print(
-    SqlPipelinePlanSupport.plan(Paths.get("examples/sql-batch-pipeline")));
+    SqlPipelinePlanSupport.plan(Paths.get("examples/sql-batch-pipeline/spark-pipeline.yaml")));
 ```
 
 预期输出类似：
@@ -276,7 +272,8 @@ Stage 1:
 export SPARK_HOME=/path/to/your/spark
 
 bin/spark-sdp.sh \
-  --spec examples/sql-batch-pipeline
+  --spec examples/sql-batch-pipeline/spark-pipeline.yaml \
+  --jobPath examples/sql-batch-pipeline
 ```
 
 如果提交到 Yarn `cluster` 模式，并且你的 Hive 配置依赖 `hive-site.xml`，可以这样：
@@ -287,6 +284,11 @@ sh examples/run_sql_hive_pipeline_on_yarn.sh
 ```
 
 `SPARK_HIVE_CONF` 可以是 `hive-site.xml` 文件路径，也可以是包含该文件的目录。
+
+仅运行一个 SQL 文件时改用 `--taskFile /path/to/task.sql`，与 `--jobPath` 二选一。
+两种方式都可追加 `--props /path/to/spark.properties` 和
+`--jars /path/to/a.jar,/path/to/b.jar`。Properties 中的配置转为 Spark `--conf`，
+同名配置由 YAML 覆盖；`--jars` 由 Spark 分发到运行环境。
 
 如果你想先看帮助信息：
 
@@ -319,7 +321,7 @@ cp target/spark-sdp.sh-1.0.jar bin/
 推荐传参：
 
 ```text
---spec examples/sql-batch-pipeline --master local[*]
+--spec examples/sql-batch-pipeline/spark-pipeline.yaml --jobPath examples/sql-batch-pipeline --master local[*]
 ```
 
 如果你运行的是 `SqlPipelineLocalDebugMain`，不传参数时也会默认执行上面的本地样例。

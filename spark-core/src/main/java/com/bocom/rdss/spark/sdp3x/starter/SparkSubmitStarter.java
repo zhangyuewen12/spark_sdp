@@ -85,9 +85,14 @@ public final class SparkSubmitStarter {
       ? resolveJobDirectory(options.jobPath == null ? specPath.getParent() : options.jobPath)
       : null;
     Map<String, String> configuration = loadConfiguration(specPath);
-    if ("hudi-compaction".equals(configuration.get("job-type")) && taskFile == null) {
-      throw new IllegalArgumentException(
-        "Hudi compaction job requires --task-file/--taskFile <tables.list>");
+    if ("hudi-compaction".equals(configuration.get("job-type"))) {
+      if (taskFile == null) {
+        throw new IllegalArgumentException(
+          "Hudi compaction job requires --task-file/--taskFile <compaction.sql>");
+      }
+      if (!taskFile.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".sql")) {
+        throw new IllegalArgumentException("Hudi compaction task file must end with .sql: " + taskFile);
+      }
     }
     Map<String, String> commonSparkConfiguration =
       loadCommonSparkConfiguration(options.propsPath);
@@ -280,7 +285,8 @@ public final class SparkSubmitStarter {
           java.net.URI.create("jar:" + archive.toUri()), environment)) {
         copyToArchive(specPath, zip.getPath("/" + specPath.getFileName()));
         if (taskFile != null) {
-          copyToArchive(taskFile, zip.getPath("/task/" + taskFile.getFileName()));
+          copyToArchive(taskFile, zip.getPath("/ta" +
+                  "sk/" + taskFile.getFileName()));
         } else {
           try (java.util.stream.Stream<Path> paths = Files.walk(jobDirectory)) {
             paths.filter(Files::isRegularFile)

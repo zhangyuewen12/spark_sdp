@@ -30,7 +30,8 @@ SPARK_SDP_HOME="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 set -- \
-  --spec "${PROJECT_ROOT}" \
+  --spec "${PROJECT_ROOT}/spark-pipeline.yaml" \
+  --jobPath "${PROJECT_ROOT}" \
   --files "${HIVE_SITE_PATH}"
 
 exec "${SPARK_SDP_HOME}/bin/spark-sdp.sh" "$@"

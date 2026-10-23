@@ -1,6 +1,5 @@
 name: sql_orders_pipeline
-libraries:
-  - transformations
+transformation: transformations
 configuration:
   spark.sql.shuffle.partitions: "1"
 spark-submit:

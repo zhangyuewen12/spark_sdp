@@ -140,19 +140,22 @@ class SqlPipelineProjectSpecLoaderTest {
   }
 
   @Test
-  void shouldReadDistinctCompactionTablesAndValidateList() throws IOException {
+  void shouldReadDistinctCompactionTablesAndValidateSql() throws IOException {
     Path spec = write("spark-pipeline.yaml", "job-type: hudi-compaction\nname: compact\n");
-    Path list = write("tables.list", "\uFEFF# comment\n db_a.table_a \n\ndb_a.table_a\ndb_b.table_b\n");
-    SqlPipelineProjectSpec loaded = loader.load(spec, list);
+    Path sql = write("compaction.sql", "\uFEFF-- comment\nRUN COMPACTION ON db_a.table_a;\n"
+      + "\nrun compaction on db_a.table_a;\n/* next table */ RUN COMPACTION ON db_b.table_b;\n");
+    SqlPipelineProjectSpec loaded = loader.load(spec, sql);
     assertEquals(Arrays.asList("db_a.table_a", "db_b.table_b"), loaded.compactionTables());
     assertTrue(loaded.sqlFiles().isEmpty());
     assertThrows(SqlPipelineProjectException.class, () -> loader.load(spec));
     assertThrows(SqlPipelineProjectException.class,
-      () -> loader.load(spec, write("tables.txt", "db_a.table_a\n")));
+      () -> loader.load(spec, write("tables.txt", "RUN COMPACTION ON db_a.table_a;\n")));
     assertThrows(SqlPipelineProjectException.class,
-      () -> loader.load(spec, write("invalid.list", "db_a.table_a\nbad-name\n")));
+      () -> loader.load(spec, write("invalid.sql", "RUN COMPACTION ON db_a.table_a;\nSELECT 1;\n")));
     assertThrows(SqlPipelineProjectException.class,
-      () -> loader.load(spec, write("empty.list", "# only comment\n")));
+      () -> loader.load(spec, write("empty.sql", "-- only comment\n")));
+    assertThrows(SqlPipelineProjectException.class,
+      () -> loader.load(spec, write("missing-semicolon.sql", "RUN COMPACTION ON db_a.table_a\n")));
   }
 
   @Test

@@ -57,7 +57,8 @@ public final class SqlPipelineRunApplication {
       if (jobSpec.jobType() == JobType.HUDI_COMPACTION) {
         jobSpec.configuration().forEach((key, value) -> sparkSession.conf().set(key, value));
         executeCompactionTables(sparkSession, jobSpec.compactionTables());
-      } else {
+      } else if(jobSpec.jobType() == JobType.SPARK_SQL) {
+
         if (sparkSessionContext.localWarehouseDirectory() != null) {
           resetLocalManagedDatasets(
             sparkSession,
@@ -70,6 +71,8 @@ public final class SqlPipelineRunApplication {
           ExecutionOptions.defaults());
         LOG.info("Executed {} flow(s) for pipeline '{}'", report.results().size(),
           pipelineDefinition.name());
+      }else {
+        throw new IllegalArgumentException("Unsupported job type: " + jobSpec.jobType());
       }
     } finally {
       sparkSession.stop();

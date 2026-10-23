@@ -17,11 +17,18 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Loads a SQL pipeline project spec from {@code spark-pipeline.yaml}.
  */
 public final class SqlPipelineProjectSpecLoader {
+  private static final Pattern COMPACTION_STATEMENT = Pattern.compile(
+    "(?i)RUN\\s+COMPACTION\\s+ON\\s+(.+)");
+  private static final Pattern SQL_COMMENTS = Pattern.compile(
+    "(?s)/\\*.*?\\*/|(?m)--[^\\r\\n]*|(?m)^\\s*#.*$");
+
   public SqlPipelineProjectSpec load(Path specFile) {
     return load(specFile, null);
   }
@@ -110,33 +117,45 @@ public final class SqlPipelineProjectSpecLoader {
     throw new SqlPipelineProjectException("Unsupported job-type: " + type);
   }
 
-  private List<String> readCompactionTables(Path listFile) {
-    if (listFile == null) {
-      throw new SqlPipelineProjectException("Hudi compaction job requires --taskFile <tables.list>");
+  private List<String> readCompactionTables(Path sqlFile) {
+    if (sqlFile == null) {
+      throw new SqlPipelineProjectException("Hudi compaction job requires --taskFile <compaction.sql>");
     }
-    if (!listFile.getFileName().toString().endsWith(".list")) {
-      throw new SqlPipelineProjectException("Hudi compaction task file must end with .list: " + listFile);
+    if (!sqlFile.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".sql")) {
+      throw new SqlPipelineProjectException("Hudi compaction task file must end with .sql: " + sqlFile);
     }
     Set<String> tables = new LinkedHashSet<>();
     try {
-      List<String> lines = Files.readAllLines(listFile, StandardCharsets.UTF_8);
-      for (int index = 0; index < lines.size(); index++) {
-        String line = index == 0 ? lines.get(index).replace("\uFEFF", "").trim()
-          : lines.get(index).trim();
-        if (line.isEmpty() || line.startsWith("#")) {
+      String source = new String(Files.readAllBytes(sqlFile), StandardCharsets.UTF_8);
+      if (source.startsWith("\uFEFF")) {
+        source = source.substring(1);
+      }
+      String sql = SQL_COMMENTS.matcher(source).replaceAll(" ");
+      if (sql.trim().isEmpty()) {
+        throw new SqlPipelineProjectException("No compaction statements in task file: " + sqlFile);
+      }
+      if (!sql.trim().endsWith(";")) {
+        throw new SqlPipelineProjectException(
+          "Compaction SQL statement must end with ';': " + sqlFile);
+      }
+      String[] statements = sql.split(";", -1);
+      for (int index = 0; index < statements.length; index++) {
+        String statement = statements[index].trim();
+        if (statement.isEmpty()) {
           continue;
         }
-        if (!SqlIdentifierUtils.isQualifiedTableName(line)) {
-          throw new SqlPipelineProjectException("Invalid schema.table in " + listFile
-            + " at line " + (index + 1) + ": " + line);
+        Matcher matcher = COMPACTION_STATEMENT.matcher(statement);
+        if (!matcher.matches() || !SqlIdentifierUtils.isQualifiedTableName(matcher.group(1).trim())) {
+          throw new SqlPipelineProjectException("Invalid RUN COMPACTION ON schema.table statement in "
+            + sqlFile + " at statement " + (index + 1) + ": " + statement);
         }
-        tables.add(line);
+        tables.add(matcher.group(1).trim());
       }
     } catch (IOException e) {
-      throw new SqlPipelineProjectException("Failed to read table list: " + listFile, e);
+      throw new SqlPipelineProjectException("Failed to read compaction SQL file: " + sqlFile, e);
     }
     if (tables.isEmpty()) {
-      throw new SqlPipelineProjectException("No tables in compaction task file: " + listFile);
+      throw new SqlPipelineProjectException("No compaction statements in task file: " + sqlFile);
     }
     return new ArrayList<>(tables);
   }
