@@ -57,6 +57,8 @@ class ScopeAndMaterializerTest {
     when(pipeline.database()).thenReturn(Optional.of("analytics"));
     when(runtimeConfig.getOption("spark.sql.adaptive.enabled")).thenReturn(Option.apply("true"));
     when(runtimeConfig.getOption("spark.sql.shuffle.partitions")).thenReturn(Option.empty());
+    when(runtimeConfig.isModifiable("spark.sql.adaptive.enabled")).thenReturn(true);
+    when(runtimeConfig.isModifiable("spark.sql.shuffle.partitions")).thenReturn(true);
 
     try (PipelineSessionScope ignored = new PipelineSessionScope(sparkSession, pipeline)) {
       verify(runtimeConfig).set("spark.sql.adaptive.enabled", "false");
@@ -68,6 +70,25 @@ class ScopeAndMaterializerTest {
     verify(runtimeConfig).set("spark.sql.adaptive.enabled", "true");
     verify(runtimeConfig).unset("spark.sql.shuffle.partitions");
     verify(catalog).setCurrentDatabase("default");
+  }
+
+  @Test
+  void pipelineSessionScopeKeepsMatchingStaticConfiguration() {
+    PipelineDefinition pipeline = mock(PipelineDefinition.class);
+    when(sparkSession.conf()).thenReturn(runtimeConfig);
+    when(sparkSession.catalog()).thenReturn(catalog);
+    when(pipeline.configuration()).thenReturn(
+      java.util.Collections.singletonMap("spark.sql.extensions", "example.Extension"));
+    when(pipeline.catalog()).thenReturn(Optional.empty());
+    when(pipeline.database()).thenReturn(Optional.empty());
+    when(runtimeConfig.getOption("spark.sql.extensions"))
+      .thenReturn(Option.apply("example.Extension"));
+
+    try (PipelineSessionScope ignored = new PipelineSessionScope(sparkSession, pipeline)) {
+      verify(runtimeConfig, org.mockito.Mockito.never())
+        .set("spark.sql.extensions", "example.Extension");
+    }
+    verify(runtimeConfig, org.mockito.Mockito.never()).unset("spark.sql.extensions");
   }
 
   @Test

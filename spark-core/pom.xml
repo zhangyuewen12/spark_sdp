@@ -37,6 +37,16 @@
             <artifactId>snakeyaml</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.quartz-scheduler</groupId>
+            <artifactId>quartz</artifactId>
+            <version>2.3.2</version>
+            <exclusions>
+                <exclusion><groupId>com.mchange</groupId><artifactId>c3p0</artifactId></exclusion>
+                <exclusion><groupId>com.mchange</groupId><artifactId>mchange-commons-java</artifactId></exclusion>
+                <exclusion><groupId>com.zaxxer</groupId><artifactId>HikariCP-java7</artifactId></exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
@@ -133,6 +143,7 @@
                             <artifactSet>
                                 <includes>
                                     <include>org.yaml:snakeyaml</include>
+                                    <include>org.quartz-scheduler:quartz</include>
                                 </includes>
                             </artifactSet>
                             <transformers>

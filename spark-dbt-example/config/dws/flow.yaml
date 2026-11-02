@@ -1,0 +1,8 @@
+name: spark_dbt_dws
+description: DWS order aggregation jobs
+schedule:
+  enabled: ${ds.schedule.enabled}
+  cron: "0 10 1 * * ?"
+  timezone: Asia/Shanghai
+  start-time: "2026-01-01 00:00:00"
+  end-time: "2099-12-31 23:59:59"

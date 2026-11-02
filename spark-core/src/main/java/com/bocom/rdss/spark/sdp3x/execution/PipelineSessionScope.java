@@ -40,7 +40,15 @@ final class PipelineSessionScope implements AutoCloseable {
     this.previousDatabase = sparkSession.catalog().currentDatabase();
 
     pipelineDefinition.configuration().forEach((key, value) -> {
-      previousValues.put(key, runtimeConfig.getOption(key));
+      Option<String> previousValue = runtimeConfig.getOption(key);
+      if (!runtimeConfig.isModifiable(key)) {
+        if (!previousValue.isDefined() || !value.equals(previousValue.get())) {
+          throw new IllegalArgumentException(
+            "Spark configuration must be set before creating SparkSession: " + key);
+        }
+        return;
+      }
+      previousValues.put(key, previousValue);
       runtimeConfig.set(key, value);
     });
 

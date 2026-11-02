@@ -50,12 +50,11 @@ public final class SqlPipelineRunApplication {
       ? new SqlPipelineProjectRunner().compile(jobSpec) : null;
     String applicationName = pipelineDefinition == null ? jobSpec.name() : pipelineDefinition.name();
     SparkSessionContext sparkSessionContext = createSparkSession(
-      cliOptions, applicationName, jobSpec.jobType());
+      cliOptions, applicationName, jobSpec.jobType(), jobSpec.configuration());
     SparkSession sparkSession = sparkSessionContext.sparkSession();
 
     try {
       if (jobSpec.jobType() == JobType.HUDI_COMPACTION) {
-        jobSpec.configuration().forEach((key, value) -> sparkSession.conf().set(key, value));
         executeCompactionTables(sparkSession, jobSpec.compactionTables());
       } else if(jobSpec.jobType() == JobType.SPARK_SQL) {
 
@@ -81,46 +80,61 @@ public final class SqlPipelineRunApplication {
 
   static void executeCompactionTables(SparkSession sparkSession, List<String> tables) {
     List<String> failedTables = new ArrayList<>();
+    LOG.info("Starting compaction maintenance for {} table(s)", tables.size());
     for (String table : tables) {
+      String stage = "SHOW COMPACTION";
       try {
         String qualifiedTable = SqlIdentifierUtils.quoteQualifiedTable(table);
+        LOG.info("Checking compaction plans for {}", table);
         List<org.apache.spark.sql.Row> plans = sparkSession.sql(
             "SHOW COMPACTION ON " + qualifiedTable).collectAsList();
-        if (plans.stream().anyMatch(row -> "INFLIGHT".equalsIgnoreCase(row.getString(2)))) {
-          LOG.warn("Skipping {}: inflight compaction exists", table);
-          continue;
-        }
-        org.apache.spark.sql.Row requested = plans.stream()
-            .filter(row -> "REQUESTED".equalsIgnoreCase(row.getString(2)))
+        LOG.info("Found {} compaction result(s) for {}", plans.size(), table);
+        // SHOW COMPACTION returns (timestamp: String, action: String, size: Integer).
+        // It does not expose REQUESTED/INFLIGHT state.
+        org.apache.spark.sql.Row plan = plans.stream()
+            .filter(row -> "compaction".equalsIgnoreCase(row.getString(1)))
             .min(Comparator.comparing(row -> row.getString(0))).orElse(null);
-        if (requested == null) {
-          LOG.info("Skipping {}: no requested compaction plan", table);
+        if (plan == null) {
+          LOG.info("Skipping {}: no compaction plan", table);
           continue;
         }
-        String instant = requested.getString(0);
+        String instant = plan.getString(0);
         if (!instant.matches("[1-9][0-9]{13,16}")) {
           throw new IllegalArgumentException("Invalid compaction instant: " + instant);
         }
+        LOG.info("Selected compaction plan for {}: instant={}, file slices={}",
+            table, instant, plan.getInt(2));
+        stage = "RUN COMPACTION";
         String sql = "RUN COMPACTION ON " + qualifiedTable + " AT " + instant;
-        LOG.info("Executing {}", sql);
+        LOG.info("Starting {}", sql);
+        long startedAt = System.nanoTime();
         sparkSession.sql(sql).collectAsList();
-        boolean completed = sparkSession.sql("SHOW COMPACTION ON " + qualifiedTable)
-            .collectAsList().stream().anyMatch(row -> instant.equals(row.getString(0))
-                && "COMPLETED".equalsIgnoreCase(row.getString(2)));
-        if (!completed) {
-          throw new IllegalStateException("Compaction SQL returned without a completed instant: "
-              + table + " at " + instant);
-        }
-        LOG.info("Completed compaction: {} at {}", table, instant);
+        LOG.info("Finished {} in {} ms", sql, (System.nanoTime() - startedAt) / 1_000_000);
+
+        stage = "RUN CLEAN";
+        sql = "RUN CLEAN ON " + qualifiedTable;
+        LOG.info("Starting {}", sql);
+        startedAt = System.nanoTime();
+        sparkSession.sql(sql).collectAsList();
+        LOG.info("Finished {} in {} ms", sql, (System.nanoTime() - startedAt) / 1_000_000);
+
+        stage = "RUN ARCHIVELOG";
+        sql = "RUN ARCHIVELOG ON " + qualifiedTable;
+        LOG.info("Starting {}", sql);
+        startedAt = System.nanoTime();
+        sparkSession.sql(sql).collectAsList();
+        LOG.info("Finished {} in {} ms", sql, (System.nanoTime() - startedAt) / 1_000_000);
+        LOG.info("Completed compaction maintenance for {} at instant {}", table, instant);
       } catch (Exception e) {
         failedTables.add(table);
-        LOG.error("Compaction failed for {}", table, e);
+        LOG.error("Compaction maintenance failed for {} during {}", table, stage, e);
       }
     }
     if (!failedTables.isEmpty()) {
-      throw new IllegalStateException("Compaction failed for " + failedTables.size()
+      throw new IllegalStateException("Compaction maintenance failed for " + failedTables.size()
           + " table(s): " + String.join(", ", failedTables));
     }
+    LOG.info("Compaction maintenance finished for {} table(s)", tables.size());
   }
 
   static boolean isLocalDevHiveEnabled() {
@@ -147,7 +161,8 @@ public final class SqlPipelineRunApplication {
   static SparkSessionContext createSparkSession(
       SqlPipelineRunOptions cliOptions,
       String applicationName,
-      JobType jobType) {
+      JobType jobType,
+      Map<String, String> configuration) {
     String localMaster = null;
     if (cliOptions.master() != null) {
       localMaster = cliOptions.master();
@@ -156,7 +171,9 @@ public final class SqlPipelineRunApplication {
     }
     boolean localExecution = localMaster != null && localMaster.startsWith("local");
     if (!localExecution) {
-      return new SparkSessionContext(newSparkBuilder(cliOptions, applicationName, jobType).getOrCreate(), null);
+      SparkSession.Builder builder = newSparkBuilder(cliOptions, applicationName, jobType);
+      configuration.forEach(builder::config);
+      return new SparkSessionContext(builder.getOrCreate(), null);
     }
 
     Optional<Map<String, String>> preferredHiveSite =
@@ -166,6 +183,7 @@ public final class SqlPipelineRunApplication {
       try {
         SparkSession.Builder preferredBuilder = newSparkBuilder(cliOptions, applicationName, jobType);
         applyHiveSiteProperties(preferredBuilder, preferredHiveSite.get());
+        configuration.forEach(preferredBuilder::config);
         preferredSession = preferredBuilder.getOrCreate();
         preferredSession.catalog().listDatabases().collectAsList();
         LOG.info("Local startup loaded Hive metastore settings from classpath resource '{}'",
@@ -180,6 +198,7 @@ public final class SqlPipelineRunApplication {
 
     SparkSession.Builder derbyBuilder = newSparkBuilder(cliOptions, applicationName, jobType);
     Path localWarehouseDirectory = applyEmbeddedDerbyMetastore(cliOptions.projectPath(), derbyBuilder);
+    configuration.forEach(derbyBuilder::config);
     return new SparkSessionContext(derbyBuilder.getOrCreate(), localWarehouseDirectory);
   }
 

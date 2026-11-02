@@ -15,7 +15,7 @@
     <modules>
         <module>spark-core</module>
         <module>spark-example</module>
-        <module>spark-app</module>
+        <module>spark-dbt-example</module>
     </modules>
 
     <properties>

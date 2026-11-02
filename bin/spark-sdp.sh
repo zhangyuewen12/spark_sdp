@@ -15,16 +15,19 @@ resolve_jar() {
     return
   fi
 
+  local library_jar="${PROJECT_HOME}/lib/spark-sdp-1.0.jar"
   local packaged_jar="${SCRIPT_DIR}/spark-sdp-1.0.jar"
   local build_jar="${PROJECT_HOME}/spark-core/target/spark-sdp-1.0.jar"
-  if [[ -f "${packaged_jar}" && -f "${build_jar}" && "${build_jar}" -nt "${packaged_jar}" ]]; then
+  if [[ -f "${library_jar}" ]]; then
+    printf '%s\n' "${library_jar}"
+  elif [[ -f "${packaged_jar}" && -f "${build_jar}" && "${build_jar}" -nt "${packaged_jar}" ]]; then
     printf '%s\n' "${build_jar}"
   elif [[ -f "${packaged_jar}" ]]; then
     printf '%s\n' "${packaged_jar}"
   elif [[ -f "${build_jar}" ]]; then
     printf '%s\n' "${build_jar}"
   else
-    echo "Could not find spark-sdp-1.0.jar. Run: ./mvnw -pl spark-core package" >&2
+    echo "Could not find spark-sdp-1.0.jar. Ask the platform maintainer for lib/spark-sdp-1.0.jar or set SPARK_SDP_JAR." >&2
     exit 1
   fi
 }

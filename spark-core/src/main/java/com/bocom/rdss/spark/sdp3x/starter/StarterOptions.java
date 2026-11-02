@@ -47,12 +47,12 @@ final class StarterOptions {
           throw new IllegalArgumentException("Option --spec may only be specified once.");
         }
         specPath = Paths.get(args[index + 1]);
-      } else if ("--job-path".equals(args[index])) {
+      } else if ("--job-path".equals(args[index]) || "--jobPath".equals(args[index])) {
         if (jobPath != null) {
           throw new IllegalArgumentException("Option --jobPath may only be specified once.");
         }
         jobPath = Paths.get(args[index + 1]);
-      } else if ("--task-file".equals(args[index]) || "--task-file".equals(args[index])) {
+      } else if ("--task-file".equals(args[index]) || "--taskFile".equals(args[index])) {
         if (taskFilePath != null) {
           throw new IllegalArgumentException("Option --taskFile may only be specified once.");
         }

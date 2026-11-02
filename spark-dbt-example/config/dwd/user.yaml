@@ -1,0 +1,12 @@
+name: spark_dbt_example_dwd_user
+job-type: spark-sql
+configuration:
+  spark.sql.shuffle.partitions: "2"
+spark-submit:
+  master: yarn
+  deploy-mode: cluster
+  queue: default
+  driver.memory: 1g
+  executor.num: "1"
+  executor.memory: 1g
+  executor.cores: "1"

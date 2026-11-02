@@ -1,0 +1,20 @@
+name: spark_dbt_example
+
+dolphinscheduler:
+  api-profile: ds34
+  api-url: ${ds.api.url}
+  project-code: ${ds.project.code}
+  project-name: ${ds.project.name}
+  deployment-dir: ${spark.project.dir}
+
+defaults:
+  worker-group: ${ds.worker.group}
+  tenant-code: ${ds.tenant.code}
+  environment-code: ${ds.environment.code}
+  warning-type: ${ds.warning.type}
+  warning-group-id: ${ds.warning.group.id}
+  execution-type: SERIAL_WAIT
+  priority: MEDIUM
+  fail-retry-times: 0
+  fail-retry-interval: 1
+  timeout-minutes: 60

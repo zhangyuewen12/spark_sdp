@@ -1,0 +1,16 @@
+name: sdf_mor_table_compaction
+job-type: hudi-compaction
+configuration:
+  hoodie.cleaner.commits.retained: "20"
+  hoodie.keep.min.commits: "30"
+  hoodie.keep.max.commits: "50"
+spark-submit:
+  master: yarn
+  deploy-mode: cluster
+  queue: default
+  driver.memory: 2g
+  executor.num: "2"
+  executor.memory: 4g
+  executor.cores: "2"
+  # The Spark installation must provide a compatible Hudi bundle and support
+  # SHOW/RUN COMPACTION, RUN CLEAN and RUN ARCHIVELOG SQL used by spark-core.
